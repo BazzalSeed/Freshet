@@ -8,9 +8,9 @@ The shift: from a **chat model** (you pull, it forgets, it always produces somet
 **watch model** (it pushes, it remembers, it only tells you what changed). It has the
 discipline to stay quiet when nothing real happened.
 
-> **Status:** early / greenfield. No app yet — we're designing and building the
-> [walking skeleton](docs/superpowers/specs/2026-06-12-walking-skeleton-design.md), the first
-> thin end-to-end slice. Build/run instructions land with it.
+> **Status:** early / greenfield. No app yet — we're designing and building
+> [Freshet v1](docs/superpowers/specs/2026-06-12-freshet-v1-design.md), a functional
+> whole-product slice built by an agent team. Build/run instructions land with it.
 
 ## Docs
 
@@ -18,7 +18,7 @@ discipline to stay quiet when nothing real happened.
   matters, how it should feel and look. Source of the §-numbered principles (`§9`), design
   language (`§5`), and scope (`§10`) referenced across the codebase. **Start here.**
 - **[Specs](docs/superpowers/specs/)** — one design spec per sub-project. First up:
-  [walking skeleton](docs/superpowers/specs/2026-06-12-walking-skeleton-design.md).
+  [Freshet v1](docs/superpowers/specs/2026-06-12-freshet-v1-design.md).
 - **[Rust primer](docs/rust-primer.md)** — the Rust you'll actually hit in the Tauri backend, Freshet-tailored.
 - **[agent-docs/](agent-docs/)** — how we orchestrate agent teams & subagents to build this.
 - **[CLAUDE.md](CLAUDE.md)** — working guidance for Claude Code in this repo.
