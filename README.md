@@ -19,6 +19,7 @@ discipline to stay quiet when nothing real happened.
   language (`§5`), and scope (`§10`) referenced across the codebase. **Start here.**
 - **[Specs](docs/superpowers/specs/)** — one design spec per sub-project. First up:
   [walking skeleton](docs/superpowers/specs/2026-06-12-walking-skeleton-design.md).
+- **[Rust primer](docs/rust-primer.md)** — the Rust you'll actually hit in the Tauri backend, Freshet-tailored.
 - **[agent-docs/](agent-docs/)** — how we orchestrate agent teams & subagents to build this.
 - **[CLAUDE.md](CLAUDE.md)** — working guidance for Claude Code in this repo.
 
