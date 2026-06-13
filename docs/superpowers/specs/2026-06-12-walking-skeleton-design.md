@@ -1,8 +1,9 @@
 # Freshet Walking Skeleton — Design Spec
 
 *Status: approved design (2026-06-12). Scope: the first sub-project of Freshet — a thin
-end-to-end vertical that threads every architectural layer. See `README.md` for the product
-vision and `agent-docs/` for how the implementation team will be orchestrated.*
+end-to-end vertical that threads every architectural layer. See
+[`docs/product-vision.md`](../../product-vision.md) for the product vision and `agent-docs/`
+for how the implementation team will be orchestrated.*
 
 ---
 
@@ -11,7 +12,7 @@ vision and `agent-docs/` for how the implementation team will be orchestrated.*
 Prove Freshet's core thesis — **watch → remember → tell what changed** — end-to-end through
 every architectural layer, with each layer paper-thin but real and connected. The skeleton
 exists to **de-risk the architecture** (especially the engine loop and the frontend↔native
-bridge) and to create the real codebase the README §10 decisions can then be designed
+bridge) and to create the real codebase the vision §10 decisions can then be designed
 against. It is not a product release; it is the spine everything else hangs on.
 
 ## 2. Success criteria (demoable)
@@ -50,7 +51,7 @@ honestly say nothing changed), the skeleton has done its job.
 - The full BYO-LLM ladder (local model, API key). Skeleton requires `claude` on `PATH`.
 - Multi-stream; settings; design polish / signature animations; packaging / signing.
 
-## 4. Invariants honored (README §9)
+## 4. Invariants honored (vision §9)
 
 The skeleton must not violate these even while thin:
 
@@ -60,7 +61,7 @@ The skeleton must not violate these even while thin:
   **separate hidden sidecar**, never polluting the output folder the user reads.
 - **Quiet by default** — "nothing new" is a first-class, cheap outcome; never manufacture novelty.
 - **Local-first & BYO-LLM** — runs on the user's machine via a detected local agent.
-- **Don't rebuild the vault** (README's term for the user's notes folder) — write a document
+- **Don't rebuild the vault** (the product vision's term for the user's notes folder) — write a document
   into the user's folder; do not become a note manager.
 
 ## 5. Architecture
@@ -178,7 +179,7 @@ _updated 2026-06-12 14:03_
 - **Frontend**: minimal; verified via the browser-mock loop, optionally one component test that
   renders a document.
 
-## 10. Build / dev approach (README §6)
+## 10. Build / dev approach (vision §6)
 
 - Develop the frontend as a **web app at localhost** against a **mock bridge** first.
 - Build the Rust core as a **library + a tiny CLI harness** — headless, and doubling as the

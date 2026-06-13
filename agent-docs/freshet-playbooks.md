@@ -4,18 +4,18 @@ Copy-paste team prompts tuned to Freshet's actual surfaces and stack. Read the
 [master reference](./agent-teams-reference.md) first. These are starting points — adjust
 team size and lenses to the task.
 
-**Stack context (from README):** local-first Tauri 2 desktop app · React + Vite SPA
+**Stack context (from the product vision):** local-first Tauri 2 desktop app · React + Vite SPA
 frontend (own design language, no stock kit; Radix/Ark headless primitives) · Rust native
 backend · thin typed command + event bridge between frontend/native · research fan-out +
 reconciliation engine · BYO-LLM (detected local agent → local model → API key) · plain
 markdown output into a vault folder.
 
-**Invariants any teammate must honor (README §9):** installable local app (never hosted) ·
+**Invariants any teammate must honor (vision §9):** installable local app (never hosted) ·
 push not pull · stateful/dedup · quiet & non-blocking (the window never blocks on refresh) ·
 significance over recency · local-first & BYO-LLM · don't rebuild the vault · topics not
 accounts · calm over engagement.
 
-> ⚠️ This is greenfield — only `README.md` exists today. Until the code lands, lean on
+> ⚠️ This is greenfield — no app code yet, only docs. Until the code lands, lean on
 > **research/design teams** (high value, no merge conflicts) over parallel-implementation teams.
 
 ---
@@ -23,10 +23,10 @@ accounts · calm over engagement.
 ## Playbook 1 — Architecture design jam (do this first)
 
 Freshet leaves the data model, scheduling, source set, and reconciliation to the builder
-(README §10). A design team explores tradeoffs in parallel before any code exists.
+(vision §10). A design team explores tradeoffs in parallel before any code exists.
 
 ```text
-Create an agent team to design Freshet's core architecture from README.md. Spawn four
+Create an agent team to design Freshet's core architecture from docs/product-vision.md. Spawn four
 teammates, each owning one decision and producing a short design doc under docs/design/:
 - "data-model": the vault/state schema — how streams, the living document, and
   dedup/change-detection state are stored as local files. Must honor: stateful, plain
@@ -56,7 +56,7 @@ Create an agent team to evaluate candidate data sources for Freshet streams. One
 per source (Reddit, Hacker News, GitHub, Polymarket, Bluesky). Each reports: API
 legitimacy & auth model, rate limits, what signal it offers, and whether a future
 cloud runner could use it (API-legitimate) vs. local-only (session-based). Flag anything
-needing a logged-in session as deferred (README §10). Use Sonnet. Synthesize a ranked
+needing a logged-in session as deferred (vision §10). Use Sonnet. Synthesize a ranked
 "sensible API-legitimate start" set.
 ```
 

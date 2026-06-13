@@ -3,12 +3,12 @@
 Freshet is a **local-first desktop app** (Tauri 2 shell · React + Vite SPA frontend · Rust
 native backend) that turns topics into self-updating **knowledge streams** synthesized into
 living markdown documents. It's a **watch model**, not a chat model: it pushes, remembers,
-and stays quiet when nothing changed. See `README.md` for the full vision/design brief.
+and stays quiet when nothing changed. See [`docs/product-vision.md`](./docs/product-vision.md) for the full vision/design brief.
 
-> Status: greenfield — only `README.md` exists. The data model, scheduler, source set, and
-> reconciliation are deliberately left to the builder (README §10).
+> Status: greenfield — no app code yet. The data model, scheduler, source set, and
+> reconciliation are deliberately left to the builder (vision §10).
 
-## Invariants the build must honor (README §9 — non-negotiable)
+## Invariants the build must honor (vision §9 — non-negotiable)
 
 - **Installable local app**, never a hosted webapp.
 - **Push, not pull** — works between visits; the user never re-asks.
@@ -21,7 +21,7 @@ and stays quiet when nothing changed. See `README.md` for the full vision/design
 - **Don't rebuild the vault** — emit plain markdown into a folder; don't become a note manager.
 - **Topics, not accounts.** **Calm over engagement** — never optimize for time-in-app.
 
-## Design language (README §5)
+## Design language (vision §5)
 
 Forward through **craft, not ornament**: speed (zero latency, optimistic UI, no spinners),
 motion (spring physics; the signature moment is a **document reconciling**), typography as

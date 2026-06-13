@@ -100,14 +100,14 @@ Why each piece is there:
 ### Example A — Architecture design jam (greenfield, no code yet)
 
 ```text
-Create a team of 4 using Sonnet to design Freshet's core architecture from README.md.
+Create a team of 4 using Sonnet to design Freshet's core architecture from docs/product-vision.md.
 
 1. data-model      → owns docs/design/data-model.md      + produces the vault/state schema + file layout
 2. scheduler       → owns docs/design/scheduler.md        + produces the per-stream cadence engine design
 3. research-engine → owns docs/design/research-engine.md  + produces the fan-out + reconcile design
 4. bridge          → owns docs/design/bridge.md           + produces the Tauri↔Rust bridge contract sketch
 
-Context for all: honor README §9 invariants — stateful, plain-markdown out, don't rebuild
+Context for all: honor vision §9 invariants — stateful, plain-markdown out, don't rebuild
 the vault, non-blocking window, BYO-LLM (local agent → local model → API key).
 Seams: scheduler ↔ research-engine; data-model ↔ bridge.
 Wait for all teammates, then synthesize docs/design/overview.md and clean up the team.
@@ -123,7 +123,7 @@ Create a team of 3 using Sonnet to review the reading-view implementation (revie
 3. a11y-perf → owns <reading-view styles/primitives> + produces findings by severity
 
 Lenses — craft: typography, motion (the reconcile signature moment), restrained native depth
-(README §5). calm: no badges/counts/spinners, "what changed" on top, non-blocking (§4, §9).
+(vision §5). calm: no badges/counts/spinners, "what changed" on top, non-blocking (§4, §9).
 a11y-perf: headless-primitive accessibility, render perf, optimistic/zero-latency feel.
 Seams: flag any overlap so two lenses don't double-count it.
 Wait for all three, then synthesize one prioritized review and clean up the team.
