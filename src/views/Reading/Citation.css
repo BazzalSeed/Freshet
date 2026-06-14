@@ -1,0 +1,62 @@
+.citation-chip {
+  display: inline;
+  margin: 0 0.15em;
+  padding: 0.05em 0.4em;
+  border: none;
+  border-radius: 4px;
+  color: var(--accent);
+  background: var(--accent-tint);
+  font-family: var(--mono);
+  font-size: 0.72em;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+.citation-chip:hover {
+  filter: brightness(0.96);
+}
+
+.citation-popover {
+  max-width: 320px;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.citation-title {
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.citation-meta {
+  margin-top: 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.citation-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.citation-link:hover {
+  text-decoration: underline;
+}
+
+.citation-arrow {
+  fill: var(--surface);
+}
