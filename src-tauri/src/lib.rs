@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod model;
 pub mod store;
 pub mod sources;
@@ -10,6 +11,15 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Fix the GUI-launch PATH so child processes (agents, source fetches)
+    // inherit the user's shell PATH. Guarded out of tests so unit tests never
+    // mutate the process environment.
+    #[cfg(not(test))]
+    {
+        // UNVERIFIED: live path
+        let _ = fix_path_env::fix();
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![greet])
