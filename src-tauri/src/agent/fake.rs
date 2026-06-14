@@ -4,7 +4,7 @@
 //! (the calm-by-default invariant) without spawning a real agent.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::model::AgentKind;
 
@@ -14,8 +14,15 @@ pub struct FakeAgent {
     kind: AgentKind,
     canned_doc: String,
     canned_reply: ChatReply,
+    /// When true, `synthesize` builds a document that reflects its input items
+    /// (instead of returning `canned_doc`), so engine tests can assert that new
+    /// items actually flowed through reconciliation.
+    reflect_items: bool,
     synthesize_calls: Arc<AtomicUsize>,
     chat_calls: Arc<AtomicUsize>,
+    /// The `prior_doc` captured on the most recent `synthesize` call. Lets
+    /// engine tests assert the agent never received the `## My notes` block.
+    last_prior_doc: Arc<Mutex<Option<String>>>,
 }
 
 impl FakeAgent {
@@ -28,9 +35,25 @@ impl FakeAgent {
                 text: String::new(),
                 proposed_description: None,
             },
+            reflect_items: false,
             synthesize_calls: Arc::new(AtomicUsize::new(0)),
             chat_calls: Arc::new(AtomicUsize::new(0)),
+            last_prior_doc: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// A fake whose `synthesize` reflects its input: it returns a Freshet-owned
+    /// document that lists each input item's title under `## What changed`. The
+    /// returned doc never contains a `## My notes` section.
+    pub fn reflecting(kind: AgentKind) -> Self {
+        let mut f = Self::new(kind, String::new());
+        f.reflect_items = true;
+        f
+    }
+
+    /// The `prior_doc` passed to the most recent `synthesize` call, if any.
+    pub fn last_prior_doc(&self) -> Option<String> {
+        self.last_prior_doc.lock().unwrap().clone()
     }
 
     /// A fake whose `chat` returns the given canned reply (incl. a proposed
@@ -40,8 +63,10 @@ impl FakeAgent {
             kind,
             canned_doc: String::new(),
             canned_reply: reply,
+            reflect_items: false,
             synthesize_calls: Arc::new(AtomicUsize::new(0)),
             chat_calls: Arc::new(AtomicUsize::new(0)),
+            last_prior_doc: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -61,8 +86,25 @@ impl Agent for FakeAgent {
         self.kind
     }
 
-    fn synthesize(&self, _input: ResearchInput) -> anyhow::Result<String> {
+    fn synthesize(&self, input: ResearchInput) -> anyhow::Result<String> {
         self.synthesize_calls.fetch_add(1, Ordering::SeqCst);
+        *self.last_prior_doc.lock().unwrap() = input.prior_doc.map(|s| s.to_string());
+
+        if self.reflect_items {
+            // Build a Freshet-owned document that reflects the input items.
+            // Never emits a `## My notes` section — that is user-owned.
+            let mut doc = String::from("# Reflected\n\n## What changed\n\n");
+            for item in input.items {
+                doc.push_str(&format!("- {}[^{}]\n", item.title, item.id));
+            }
+            doc.push_str("\n## Current understanding\n\nState reflects the items above.\n\n");
+            doc.push_str("## Open questions\n\n- None.\n\n");
+            for item in input.items {
+                doc.push_str(&format!("[^{}]: {}\n", item.id, item.url));
+            }
+            return Ok(doc);
+        }
+
         Ok(self.canned_doc.clone())
     }
 
