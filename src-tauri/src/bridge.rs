@@ -141,8 +141,9 @@ pub fn recheck_agents(state: State<'_, BackendState>) -> Vec<AgentStatus> {
 
 #[tauri::command]
 pub fn set_root_folder(state: State<'_, BackendState>, path: String) -> Result<(), String> {
-    let root = PathBuf::from(&path);
-    estr(commands::set_root_folder(&state.config_dir, &root))?;
+    // Pass the raw string to commands::set_root_folder, which calls normalize_root
+    // to expand ~ / $HOME and reject relative paths before creating dirs or persisting.
+    estr(commands::set_root_folder(&state.config_dir, &path))?;
     // Refresh the in-memory cache from disk.
     *state.config.lock().expect("config mutex poisoned") =
         commands::load_app_config(&state.config_dir);

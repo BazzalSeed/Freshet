@@ -12,7 +12,7 @@
 //! `config.json` via [`load_app_config`] / [`save_app_config`], which take the
 //! config-dir path explicitly so they are testable.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -90,6 +90,73 @@ impl std::fmt::Display for FreshetError {
 
 impl std::error::Error for FreshetError {}
 
+impl FreshetError {
+    pub fn invalid_root(msg: impl Into<String>) -> Self {
+        Self {
+            code: "invalid_root".into(),
+            message: msg.into(),
+            hint: None,
+        }
+    }
+}
+
+/// Expand a leading `~` or `$HOME` to the user's home directory, and return an
+/// absolute `PathBuf`.
+///
+/// Rules:
+/// - Whitespace is trimmed first. Empty string → `Err(invalid_root)`.
+/// - A leading `~/` or bare `~` is replaced with `$HOME`. A leading `$HOME` is
+///   also replaced. Both are resolved via `std::env::var("HOME")`.
+/// - After expansion the path **must** be absolute; if it is still relative,
+///   `Err(invalid_root)` is returned — we never silently make a relative path
+///   into an absolute one by joining it to CWD, because in `tauri dev` the CWD
+///   is `src-tauri/` which is inside the watched source tree.
+/// - The path does not need to exist yet; the caller creates it.
+pub fn normalize_root(input: &str) -> Result<PathBuf, FreshetError> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Err(FreshetError::invalid_root("Please choose a folder."));
+    }
+
+    // Expand leading `~` / `~/` / `$HOME`.
+    let expanded: String = if trimmed == "~" || trimmed.starts_with("~/") {
+        let home = std::env::var("HOME").unwrap_or_default();
+        if home.is_empty() {
+            return Err(FreshetError::invalid_root(
+                "Cannot expand ~ — HOME environment variable is not set.",
+            ));
+        }
+        if trimmed == "~" {
+            home
+        } else {
+            format!("{}{}", home, &trimmed[1..]) // trimmed[1..] starts with '/'
+        }
+    } else if trimmed == "$HOME" || trimmed.starts_with("$HOME/") {
+        let home = std::env::var("HOME").unwrap_or_default();
+        if home.is_empty() {
+            return Err(FreshetError::invalid_root(
+                "Cannot expand $HOME — HOME environment variable is not set.",
+            ));
+        }
+        if trimmed == "$HOME" {
+            home
+        } else {
+            format!("{}{}", home, &trimmed[5..]) // trimmed[5..] starts with '/'
+        }
+    } else {
+        trimmed.to_string()
+    };
+
+    let path = PathBuf::from(&expanded);
+    if !path.is_absolute() {
+        return Err(FreshetError::invalid_root(format!(
+            "Folder path must be absolute (got \"{input}\"). Pick a folder with the Browse button."
+        )));
+    }
+
+    Ok(path)
+}
+
 /// Classify an `anyhow::Error` from an agent call into a [`FreshetError`].
 ///
 /// Checks the error message chain for "Not logged in" / "/login" strings
@@ -148,10 +215,24 @@ fn app_config_path(config_dir: &Path) -> std::path::PathBuf {
 
 /// Load the app config from `<config_dir>/config.json`; returns
 /// `AppConfig::default()` if absent or unreadable.
+///
+/// Defensively re-normalizes `config.root` on load so that a `~/…` path saved
+/// before this fix (or on a system where `~` was stored literally) is expanded
+/// to an absolute path. If normalization fails (e.g. HOME not set), the raw
+/// stored value is kept as-is rather than losing the root entirely.
 pub fn load_app_config(config_dir: &Path) -> AppConfig {
-    store::read_to_string_opt(&app_config_path(config_dir))
+    let mut cfg: AppConfig = store::read_to_string_opt(&app_config_path(config_dir))
         .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // Expand ~ / $HOME in any previously-stored root, ignoring errors.
+    if let Some(raw) = cfg.root.take() {
+        cfg.root = Some(
+            normalize_root(&raw)
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or(raw),
+        );
+    }
+    cfg
 }
 
 /// Persist `cfg` to `<config_dir>/config.json` atomically.
@@ -187,13 +268,21 @@ pub fn onboarding_state(cfg: &AppConfig, agents: &[AgentStatus]) -> OnboardingSt
     }
 }
 
-/// Persist `root` as the vault pointer in the app config, and create the
-/// `.freshet/` directory tree under it so subsequent stream writes succeed.
-pub fn set_root_folder(config_dir: &Path, root: &Path) -> anyhow::Result<()> {
+/// Normalize and persist `root_input` as the vault pointer in the app config,
+/// and create the `.freshet/` directory tree under it so subsequent stream
+/// writes succeed.
+///
+/// Calls [`normalize_root`] first, so a leading `~` / `$HOME` is expanded to
+/// the user's home directory and relative paths are rejected. The normalized
+/// absolute path is what gets stored and used to create directories.
+pub fn set_root_folder(config_dir: &Path, root_input: &str) -> anyhow::Result<()> {
+    let root = normalize_root(root_input)
+        .map_err(|e| anyhow::anyhow!("{}", e.message))?;
+
     // Create the .freshet/ subtree eagerly.
-    std::fs::create_dir_all(store::streams_dir(root))
+    std::fs::create_dir_all(store::streams_dir(&root))
         .with_context(|| format!("create streams dir under {root:?}"))?;
-    std::fs::create_dir_all(store::freshet_dir(root).join("history"))
+    std::fs::create_dir_all(store::freshet_dir(&root).join("history"))
         .with_context(|| format!("create history dir under {root:?}"))?;
 
     let mut cfg = load_app_config(config_dir);
@@ -597,7 +686,8 @@ mod tests {
     fn set_root_creates_freshet_dirs_and_persists() {
         let cfg_dir = tmp();
         let vault = tmp();
-        set_root_folder(cfg_dir.path(), vault.path()).expect("set root");
+        let vault_str = vault.path().to_string_lossy().into_owned();
+        set_root_folder(cfg_dir.path(), &vault_str).expect("set root");
 
         assert!(store::streams_dir(vault.path()).is_dir());
         assert!(store::freshet_dir(vault.path()).join("history").is_dir());
@@ -961,5 +1051,145 @@ mod tests {
         // Serialized JSON must NOT contain "hint" key (skip_serializing_if).
         let json = serde_json::to_string(&fe).unwrap();
         assert!(!json.contains("\"hint\""), "hint key must be absent: {json}");
+    }
+
+    // ── normalize_root ──────────────────────────────────────────────────────
+
+    /// `~/Documents/Freshet` expands to an absolute path ending with
+    /// `Documents/Freshet` using $HOME.
+    #[test]
+    fn normalize_root_tilde_expands_to_absolute() {
+        let home = std::env::var("HOME").expect("HOME must be set");
+        let result = normalize_root("~/Documents/Freshet").expect("should succeed");
+        assert!(
+            result.is_absolute(),
+            "expanded path must be absolute, got: {result:?}"
+        );
+        assert!(
+            result.starts_with(&home),
+            "expanded path must start with HOME ({home:?}), got: {result:?}"
+        );
+        assert!(
+            result.ends_with("Documents/Freshet"),
+            "must end with Documents/Freshet, got: {result:?}"
+        );
+        // Must not contain a literal `~`.
+        assert!(
+            !result.to_string_lossy().contains('~'),
+            "result must not contain '~': {result:?}"
+        );
+    }
+
+    /// A bare `~` (no trailing slash) expands to HOME.
+    #[test]
+    fn normalize_root_bare_tilde_expands_to_home() {
+        let home = std::env::var("HOME").expect("HOME must be set");
+        let result = normalize_root("~").expect("bare ~ should succeed");
+        assert_eq!(result.to_string_lossy(), home);
+    }
+
+    /// An already-absolute path passes through unchanged.
+    #[test]
+    fn normalize_root_absolute_path_unchanged() {
+        let result = normalize_root("/abs/path").expect("absolute path should succeed");
+        assert_eq!(result, PathBuf::from("/abs/path"));
+    }
+
+    /// A relative path (no leading `/` or `~`) must return `Err(invalid_root)`.
+    #[test]
+    fn normalize_root_relative_path_returns_err() {
+        let err = normalize_root("relative/path").unwrap_err();
+        assert_eq!(err.code, "invalid_root", "wrong code: {err:?}");
+        assert!(
+            err.message.contains("absolute"),
+            "error must mention 'absolute': {}", err.message
+        );
+    }
+
+    /// Empty string → `Err(invalid_root)` with a prompt to choose a folder.
+    #[test]
+    fn normalize_root_empty_returns_err() {
+        let err = normalize_root("").unwrap_err();
+        assert_eq!(err.code, "invalid_root");
+        assert!(
+            err.message.contains("choose a folder") || err.message.contains("Please"),
+            "message: {}", err.message
+        );
+    }
+
+    /// Whitespace-only string → `Err(invalid_root)`.
+    #[test]
+    fn normalize_root_whitespace_returns_err() {
+        let err = normalize_root("   ").unwrap_err();
+        assert_eq!(err.code, "invalid_root");
+    }
+
+    /// `$HOME/x` expands to `<home>/x`.
+    #[test]
+    fn normalize_root_dollar_home_expands() {
+        let home = std::env::var("HOME").expect("HOME must be set");
+        let result = normalize_root("$HOME/x").expect("$HOME/x should succeed");
+        assert!(result.is_absolute(), "must be absolute: {result:?}");
+        assert!(
+            result.starts_with(&home),
+            "must start with HOME ({home:?}): {result:?}"
+        );
+        assert!(
+            result.ends_with("x"),
+            "must end with 'x': {result:?}"
+        );
+        assert!(
+            !result.to_string_lossy().contains("$HOME"),
+            "must not contain literal $HOME: {result:?}"
+        );
+    }
+
+    /// `set_root_folder` called with a `~/…` path stores an absolute (no `~`)
+    /// path and creates the `.freshet/` dirs at the expanded location.
+    #[test]
+    fn set_root_folder_tilde_path_stores_absolute_and_creates_dirs() {
+        // Override HOME to a temp dir so we don't touch the real home directory
+        // and so the test is hermetic regardless of filesystem state.
+        let fake_home = tempfile::tempdir().expect("create fake home tempdir");
+        let fake_home_str = fake_home.path().to_string_lossy().into_owned();
+        std::env::set_var("HOME", &fake_home_str);
+
+        let cfg_dir = tmp();
+        // Pass a tilde path; normalize_root should expand it.
+        let tilde_input = "~/MyVault/Freshet";
+        set_root_folder(cfg_dir.path(), tilde_input).expect("set_root_folder with tilde");
+
+        let cfg = load_app_config(cfg_dir.path());
+        let stored = cfg.root.expect("root must be stored");
+
+        // Stored value must be absolute — no leading `~`.
+        assert!(
+            stored.starts_with('/'),
+            "stored root must be absolute, got: {stored}"
+        );
+        assert!(
+            !stored.contains('~'),
+            "stored root must not contain '~', got: {stored}"
+        );
+        assert!(
+            stored.ends_with("MyVault/Freshet"),
+            "stored root must end with MyVault/Freshet, got: {stored}"
+        );
+
+        // The dirs must exist at the expanded path.
+        let root = PathBuf::from(&stored);
+        assert!(
+            store::streams_dir(&root).is_dir(),
+            "streams dir must exist at expanded path"
+        );
+        assert!(
+            store::freshet_dir(&root).join("history").is_dir(),
+            "history dir must exist at expanded path"
+        );
+
+        // Restore HOME to avoid polluting other tests.
+        if let Ok(original) = std::env::var("ORIGINAL_HOME") {
+            std::env::set_var("HOME", original);
+        }
     }
 }
