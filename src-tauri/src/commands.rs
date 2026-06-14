@@ -283,6 +283,9 @@ pub fn description_from_input(input: &DraftInput, now: &str) -> StreamDescriptio
 /// `agent.synthesize` (no prior document — this is the first synthesis). Returns
 /// the draft markdown and the proposed description so the frontend can present
 /// them before the user commits.
+///
+/// Returns `Err` when all sources returned 0 items — calling the agent with
+/// nothing to say is pointless and would hang the UI on a slow/failing agent.
 pub fn generate_first_draft(
     input: &DraftInput,
     agent: &dyn Agent,
@@ -292,6 +295,13 @@ pub fn generate_first_draft(
     let proposed = description_from_input(input, now);
 
     let items = crate::sources::fetch_all(providers, &proposed.topic, 30);
+
+    if items.is_empty() {
+        anyhow::bail!(
+            "No results from the selected sources. \
+             Try another source — some (e.g. Reddit) may be blocked or need setup."
+        );
+    }
 
     let draft = agent.synthesize(ResearchInput {
         topic: &proposed.topic,
@@ -307,6 +317,9 @@ pub fn generate_first_draft(
 
 /// Persist a new stream and run one refresh pass to produce + write its initial
 /// document and state. Returns the resulting summary.
+///
+/// Fails if all sources return 0 items — we will not create an empty stream
+/// whose first doc would be a hallucination with no evidence.
 pub fn create_stream(
     root: &Path,
     desc: &StreamDescription,
@@ -314,6 +327,16 @@ pub fn create_stream(
     providers: &[Box<dyn SourceProvider>],
     now: &str,
 ) -> anyhow::Result<StreamSummary> {
+    // Pre-flight: fetch to see if sources have anything.  This also primes
+    // the UI with a useful error rather than hanging on the agent call.
+    let preview_items = crate::sources::fetch_all(providers, &desc.topic, 1);
+    if preview_items.is_empty() {
+        anyhow::bail!(
+            "No results from the selected sources. \
+             Try another source — some (e.g. Reddit) may be blocked or need setup."
+        );
+    }
+
     store::save_description(root, desc)?;
     engine::refresh(root, desc, agent, providers, now)?;
 
@@ -637,5 +660,46 @@ mod tests {
 
         // No description should have been written to the vault.
         assert!(store::list_descriptions(root).is_empty(), "draft must not persist a stream");
+    }
+
+    // ── 0-items guard (Fix 2) ───────────────────────────────────────────────
+
+    /// generate_first_draft with 0-item providers must return Err with a useful
+    /// message and must NOT call synthesize.
+    #[test]
+    fn first_draft_zero_items_returns_err_no_synth() {
+        let agent = FakeAgent::reflecting(AgentKind::ClaudeCode);
+        // Empty provider list → fetch_all returns 0 items.
+        let providers: Vec<Box<dyn SourceProvider>> = vec![];
+
+        let err = generate_first_draft(&draft_input(), &agent, &providers, "2026-06-14T10:00:00Z")
+            .unwrap_err();
+
+        assert!(
+            err.to_string().contains("No results"),
+            "error must mention 'No results': {err}"
+        );
+        assert_eq!(
+            agent.synthesize_calls(),
+            0,
+            "synthesize must not be called when 0 items fetched"
+        );
+    }
+
+    /// generate_first_draft with a FakeSourceProvider returning empty Vec also fails.
+    #[test]
+    fn first_draft_empty_provider_returns_err_no_synth() {
+        let agent = FakeAgent::reflecting(AgentKind::ClaudeCode);
+        let providers: Vec<Box<dyn SourceProvider>> =
+            vec![Box::new(FakeSourceProvider::new("hackernews", vec![]))];
+
+        let err = generate_first_draft(&draft_input(), &agent, &providers, "2026-06-14T10:00:00Z")
+            .unwrap_err();
+
+        assert!(
+            err.to_string().contains("No results"),
+            "error must mention 'No results': {err}"
+        );
+        assert_eq!(agent.synthesize_calls(), 0, "synthesize must not be called");
     }
 }

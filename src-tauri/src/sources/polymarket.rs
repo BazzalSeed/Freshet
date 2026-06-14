@@ -9,42 +9,33 @@ use super::HttpClient;
 // ── API shapes ────────────────────────────────────────────────────────────────
 
 /// The Gamma API returns a top-level JSON array.
+///
+/// Real response shape (as of 2026-06): numeric fields (`volume`, `liquidity`)
+/// arrive as **JSON strings**, not numbers. We parse them defensively with
+/// `parse_f64_str`. Unknown fields are ignored via `#[serde(default)]` +
+/// `deny_unknown_fields` is NOT set so new server fields don't break parsing.
 #[derive(Debug, Deserialize)]
 struct PolymarketMarket {
     id: String,
     question: String,
     slug: String,
-    /// Trading volume; may be absent in some API responses.
-    volume: Option<f64>,
-    /// Either a JSON-encoded string array `"[\"0.61\",\"0.39\"]"` or a real
-    /// JSON array, or null.  We handle all three defensively.
-    #[serde(rename = "outcomePrices")]
-    outcome_prices: Option<serde_json::Value>,
+    /// Trading volume (string on the wire, e.g. `"98234.5"`).
+    #[serde(default)]
+    volume: Option<serde_json::Value>,
+    /// Liquidity (string on the wire). Used as score fallback when volume absent.
+    #[serde(default)]
+    liquidity: Option<serde_json::Value>,
+    /// Market open date (ISO-8601 string). Mapped to `created_at`.
+    #[serde(rename = "startDate", default)]
+    start_date: Option<String>,
 }
 
-// ── Outcome-prices helper ─────────────────────────────────────────────────────
+// ── Numeric-string helper ─────────────────────────────────────────────────────
 
-/// Extract the YES probability from `outcomePrices`.
-///
-/// The field is returned as either:
-/// - A JSON-encoded string: `"[\"0.61\",\"0.39\"]"`
-/// - A real JSON array: `["0.61","0.39"]`
-/// - `null` / absent
-///
-/// Returns `None` if the value is absent, null, or cannot be parsed.
-fn parse_yes_prob(outcome_prices: &Option<serde_json::Value>) -> Option<f64> {
-    let val = outcome_prices.as_ref()?;
-
-    // Normalise: if it's a JSON string, parse that string as JSON.
-    let arr: serde_json::Value = match val {
-        serde_json::Value::String(s) => serde_json::from_str(s).ok()?,
-        other => other.clone(),
-    };
-
-    // Now we expect an array whose first element is a numeric string.
-    let arr = arr.as_array()?;
-    let first = arr.first()?;
-    match first {
+/// Parse a `serde_json::Value` that may be a JSON string or a JSON number into
+/// `f64`. Returns `None` on null, absent, or unparseable value.
+fn parse_f64_val(val: &Option<serde_json::Value>) -> Option<f64> {
+    match val.as_ref()? {
         serde_json::Value::String(s) => s.parse::<f64>().ok(),
         serde_json::Value::Number(n) => n.as_f64(),
         _ => None,
@@ -61,16 +52,17 @@ pub fn parse(json: &str) -> anyhow::Result<Vec<SourceItem>> {
     let mut items: Vec<SourceItem> = markets
         .into_iter()
         .map(|m| {
-            let volume = m.volume.unwrap_or(0.0);
-            let yes_prob = parse_yes_prob(&m.outcome_prices);
+            // Volume is the primary score; fall back to liquidity if absent.
+            let volume = parse_f64_val(&m.volume);
+            let liquidity = parse_f64_val(&m.liquidity);
+            let score = volume.or(liquidity).unwrap_or(0.0);
 
-            let snippet = match yes_prob {
-                Some(p) => format!(
-                    "Yes {:.0}% · Vol ${:.0}",
-                    p * 100.0,
-                    volume,
-                ),
-                None => format!("Vol ${volume:.0}"),
+            let snippet = if let Some(v) = volume {
+                format!("Vol ${v:.0}")
+            } else if let Some(liq) = liquidity {
+                format!("Liquidity ${liq:.0}")
+            } else {
+                "No volume data".to_string()
             };
 
             SourceItem {
@@ -78,9 +70,9 @@ pub fn parse(json: &str) -> anyhow::Result<Vec<SourceItem>> {
                 source: "polymarket".into(),
                 url: format!("https://polymarket.com/event/{}", m.slug),
                 title: m.question,
-                score: Some(volume),
+                score: Some(score),
                 snippet,
-                created_at: None,
+                created_at: m.start_date,
             }
         })
         .collect();
@@ -161,36 +153,42 @@ mod tests {
         assert_eq!(items.len(), 3);
     }
 
+    /// id is `polymarket:<id>` using the numeric id from the fixture.
     #[test]
-    fn parse_source_qualified_id_hex() {
+    fn parse_source_qualified_id() {
         let items = parse(&fixture()).expect("parse");
-        // Highest volume in fixture is 0xabc123def456789 (98234.5).
-        assert_eq!(items[0].id, "polymarket:0xabc123def456789");
+        // Highest volume in fixture is id "2322685" (volume "98234.5").
+        assert_eq!(items[0].id, "polymarket:2322685");
     }
 
+    /// Second item by volume has id "42001" and volume "45612.0" (string on wire).
     #[test]
     fn parse_source_qualified_id_numeric() {
         let items = parse(&fixture()).expect("parse");
-        // Second item has id "42001".
         let item = items
             .iter()
             .find(|i| i.id == "polymarket:42001")
             .expect("numeric id item not found");
+        // Score is parsed from the string "45612.0".
         assert_eq!(item.score, Some(45612.0));
     }
 
+    /// URL is built from the slug field.
     #[test]
     fn parse_url_uses_slug() {
         let items = parse(&fixture()).expect("parse");
+        // Highest-volume item has slug "fifwc-eng-hrv-2026-06-17-exact-score-0-1".
         assert_eq!(
             items[0].url,
-            "https://polymarket.com/event/rust-top-3-language-2027"
+            "https://polymarket.com/event/fifwc-eng-hrv-2026-06-17-exact-score-0-1"
         );
     }
 
+    /// Score is parsed from the volume string field.
     #[test]
-    fn parse_score_is_volume() {
+    fn parse_score_from_string_volume() {
         let items = parse(&fixture()).expect("parse");
+        // "98234.5" (string) → f64 98234.5
         assert_eq!(items[0].score, Some(98234.5));
     }
 
@@ -203,49 +201,43 @@ mod tests {
         assert_eq!(scores, sorted);
     }
 
+    /// Snippet shows volume from the string-encoded field.
     #[test]
-    fn parse_outcome_prices_string_encoded() {
-        // First fixture item has outcomePrices as a JSON-encoded string.
+    fn parse_snippet_shows_volume() {
         let items = parse(&fixture()).expect("parse");
-        // YES probability is 72% → snippet contains "Yes 72%".
         assert!(
-            items[0].snippet.contains("Yes 72%"),
-            "expected 'Yes 72%' in snippet: {}",
+            items[0].snippet.contains("Vol $"),
+            "expected 'Vol $' in snippet: {}",
             items[0].snippet
         );
     }
 
+    /// created_at is populated from startDate.
     #[test]
-    fn parse_null_outcome_prices_produces_vol_only_snippet() {
+    fn parse_created_at_from_start_date() {
         let items = parse(&fixture()).expect("parse");
-        // Third item (42002) has outcomePrices: null.
-        let item = items
-            .iter()
-            .find(|i| i.id == "polymarket:42002")
-            .expect("null-prices item not found");
-        assert!(
-            item.snippet.starts_with("Vol $"),
-            "expected Vol-only snippet: {}",
-            item.snippet
-        );
-        assert!(
-            !item.snippet.contains("Yes"),
-            "should not contain Yes: {}",
-            item.snippet
+        assert_eq!(
+            items[0].created_at.as_deref(),
+            Some("2026-06-01T00:00:00Z"),
+            "created_at must come from startDate"
         );
     }
 
+    /// When volume is absent, liquidity is used as score (string-encoded).
     #[test]
-    fn parse_outcome_prices_real_array() {
-        // Build a synthetic fixture with a real JSON array (not string-encoded).
-        let json = r#"[{"id":"99","question":"Q","slug":"q-slug","volume":1000.0,"outcomePrices":["0.55","0.45"]}]"#;
-        let items = parse(json).expect("parse real array");
+    fn parse_falls_back_to_liquidity_when_volume_absent() {
+        let json = r#"[{"id":"99","question":"Q","slug":"q-slug","liquidity":"500.0"}]"#;
+        let items = parse(json).expect("parse liquidity fallback");
         assert_eq!(items.len(), 1);
-        assert!(
-            items[0].snippet.contains("Yes 55%"),
-            "expected 'Yes 55%' in snippet: {}",
-            items[0].snippet
-        );
+        assert_eq!(items[0].score, Some(500.0));
+    }
+
+    /// Numeric (non-string) volume values are also accepted (defensive).
+    #[test]
+    fn parse_numeric_volume_also_accepted() {
+        let json = r#"[{"id":"99","question":"Q","slug":"q-slug","volume":1000.0}]"#;
+        let items = parse(json).expect("parse numeric volume");
+        assert_eq!(items[0].score, Some(1000.0));
     }
 
     // ── fetch via FakeHttp ─────────────────────────────────────────────────
@@ -262,7 +254,8 @@ mod tests {
         let provider = Provider::new(http);
         let items = provider.fetch(topic, limit).expect("fetch");
         assert_eq!(items.len(), 3);
-        assert_eq!(items[0].id, "polymarket:0xabc123def456789");
+        // Highest-volume item (2322685) is first.
+        assert_eq!(items[0].id, "polymarket:2322685");
     }
 
     #[test]

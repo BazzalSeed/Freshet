@@ -58,7 +58,11 @@ impl Agent for ClaudeAgent {
         // UNVERIFIED: live path
         let out = self.runner.run(path, &arg_refs)?;
         if !out.success {
-            anyhow::bail!("claude synthesize failed: {}", out.stderr.trim());
+            // Include both stderr and stdout so messages like
+            // "Not logged in · Please run /login" (which claude may emit on
+            // stdout) are surfaced to the UI rather than being swallowed.
+            let detail = non_empty_detail(&out.stdout, &out.stderr);
+            anyhow::bail!("claude synthesize failed: {detail}");
         }
         Ok(out.stdout)
     }
@@ -74,13 +78,30 @@ impl Agent for ClaudeAgent {
         // UNVERIFIED: live path
         let out = self.runner.run(path, &arg_refs)?;
         if !out.success {
-            anyhow::bail!("claude chat failed: {}", out.stderr.trim());
+            let detail = non_empty_detail(&out.stdout, &out.stderr);
+            anyhow::bail!("claude chat failed: {detail}");
         }
         let proposed = extract_proposed(&out.stdout);
         Ok(ChatReply {
             text: out.stdout,
             proposed_description: proposed,
         })
+    }
+}
+
+/// Return the most useful non-empty detail string from a failed subprocess.
+///
+/// claude sometimes emits the human-readable error on stdout (e.g. "Not logged
+/// in · Please run /login") rather than stderr, so we check both.
+fn non_empty_detail<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
+    let s = stderr.trim();
+    let o = stdout.trim();
+    if !s.is_empty() {
+        s
+    } else if !o.is_empty() {
+        o
+    } else {
+        "(no output)"
     }
 }
 
@@ -99,6 +120,105 @@ pub(super) fn render_item_line(item: &SourceItem) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent::discovery::CmdOutput;
+    use std::sync::Arc;
+
+    /// A non-success CmdOutput with stderr "Not logged in" must surface that
+    /// message in the synthesize Err, not swallow it.
+    #[test]
+    fn synthesize_non_zero_surfaces_stderr() {
+        use crate::agent::ResearchInput;
+        // We match on the program path + args prefix; just match the path key.
+        // FakeCmdRunner matches exact keys, so we use a canned non-success response
+        // that the ClaudeAgent will hit when it calls runner.run(path, args).
+        // Rather than reproducing the exact prompt, wire a runner that returns
+        // failure for ANY call (miss → default non-success empty CmdOutput has
+        // empty stderr). Instead we register the exact key for our fake path.
+        //
+        // Build a minimal synthesize call: topic with no items so the prompt is
+        // short, then key on path + first two args ("-p", prompt).
+        // FakeCmdRunner.key = program \0 arg1 \0 arg2 ... so we can't easily
+        // pre-register the full prompt. Use a separate approach: build a runner
+        // that always returns the failure output regardless of key.
+        struct AlwaysFailRunner {
+            stdout: String,
+            stderr: String,
+        }
+        impl CmdRunner for AlwaysFailRunner {
+            fn run(&self, _program: &str, _args: &[&str]) -> anyhow::Result<CmdOutput> {
+                Ok(CmdOutput {
+                    success: false,
+                    stdout: self.stdout.clone(),
+                    stderr: self.stderr.clone(),
+                })
+            }
+        }
+
+        let runner = AlwaysFailRunner {
+            stdout: String::new(),
+            stderr: "Not logged in · Please run /login".to_string(),
+        };
+        let agent = ClaudeAgent::new(
+            std::path::PathBuf::from("/fake/claude"),
+            Arc::new(runner) as Arc<dyn CmdRunner>,
+        );
+
+        let items = vec![];
+        let err = agent
+            .synthesize(ResearchInput {
+                topic: "rust",
+                items: &items,
+                prior_doc: None,
+            })
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Not logged in"),
+            "error must contain agent's stderr: {msg}"
+        );
+    }
+
+    /// When stderr is empty but stdout carries the auth message, it must surface.
+    #[test]
+    fn synthesize_non_zero_surfaces_stdout_when_stderr_empty() {
+        use crate::agent::ResearchInput;
+        struct AlwaysFailRunner {
+            stdout: String,
+            stderr: String,
+        }
+        impl CmdRunner for AlwaysFailRunner {
+            fn run(&self, _program: &str, _args: &[&str]) -> anyhow::Result<CmdOutput> {
+                Ok(CmdOutput {
+                    success: false,
+                    stdout: self.stdout.clone(),
+                    stderr: self.stderr.clone(),
+                })
+            }
+        }
+
+        let runner = AlwaysFailRunner {
+            stdout: "Not logged in · Please run /login".to_string(),
+            stderr: String::new(),
+        };
+        let agent = ClaudeAgent::new(
+            std::path::PathBuf::from("/fake/claude"),
+            Arc::new(runner) as Arc<dyn CmdRunner>,
+        );
+
+        let items = vec![];
+        let err = agent
+            .synthesize(ResearchInput {
+                topic: "rust",
+                items: &items,
+                prior_doc: None,
+            })
+            .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Not logged in"),
+            "error must contain agent's stdout when stderr empty: {msg}"
+        );
+    }
 
     #[test]
     fn synthesize_args_have_expected_flags() {

@@ -10,6 +10,9 @@ export interface DraftResult { draftMarkdown: string; proposedDescription: Strea
 export type RefreshPhase = "detecting" | "researching" | "synthesizing" | "done" | "error";
 export interface RefreshProgress { streamId: string; phase: RefreshPhase }
 export const FREE_SOURCES = ["reddit", "hackernews", "github", "polymarket"] as const;
+// Reddit needs OAuth for reliable access (HTTP 403 on anonymous requests — tracked).
+// Keep it in FREE_SOURCES so it remains selectable, but exclude it from defaults.
+export const DEFAULT_SOURCES = ["hackernews", "github", "polymarket"] as const;
 
 // ── Onboarding / config / agents ─────────────────────────────────────────────
 export type AgentKind = "claude_code" | "codex";

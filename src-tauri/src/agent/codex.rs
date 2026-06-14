@@ -62,7 +62,10 @@ impl Agent for CodexAgent {
         // UNVERIFIED: live path
         let out = self.runner.run(path, &arg_refs)?;
         if !out.success {
-            anyhow::bail!("codex synthesize failed: {}", out.stderr.trim());
+            // Include both stderr and stdout so auth errors (often on stdout)
+            // are surfaced to the UI rather than being swallowed.
+            let detail = non_empty_detail(&out.stdout, &out.stderr);
+            anyhow::bail!("codex synthesize failed: {detail}");
         }
         Ok(out.stdout)
     }
@@ -78,13 +81,29 @@ impl Agent for CodexAgent {
         // UNVERIFIED: live path
         let out = self.runner.run(path, &arg_refs)?;
         if !out.success {
-            anyhow::bail!("codex chat failed: {}", out.stderr.trim());
+            let detail = non_empty_detail(&out.stdout, &out.stderr);
+            anyhow::bail!("codex chat failed: {detail}");
         }
         let proposed = extract_proposed(&out.stdout);
         Ok(ChatReply {
             text: out.stdout,
             proposed_description: proposed,
         })
+    }
+}
+
+/// Return the most useful non-empty detail string from a failed subprocess.
+///
+/// Codex sometimes emits auth errors on stdout rather than stderr.
+fn non_empty_detail<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
+    let s = stderr.trim();
+    let o = stdout.trim();
+    if !s.is_empty() {
+        s
+    } else if !o.is_empty() {
+        o
+    } else {
+        "(no output)"
     }
 }
 

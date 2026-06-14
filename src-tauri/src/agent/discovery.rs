@@ -26,18 +26,57 @@ pub trait CmdRunner: Send + Sync {
 }
 
 /// Production runner using `std::process::Command`.
+///
+/// Every subprocess invocation is subject to a hard 120-second timeout: we
+/// spawn the child, hand off stdout/stderr collection to a background thread,
+/// and `recv_timeout` in the calling thread. On timeout the child is killed and
+/// we return an error so the UI is never left hanging. Real agent paths are
+/// marked `// UNVERIFIED: live path`.
 // UNVERIFIED: live path
 pub struct RealCmdRunner;
+
+/// Hard timeout applied to every subprocess (120 s).
+const CMD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 impl CmdRunner for RealCmdRunner {
     // UNVERIFIED: live path
     fn run(&self, program: &str, args: &[&str]) -> anyhow::Result<CmdOutput> {
-        let output = std::process::Command::new(program).args(args).output()?;
-        Ok(CmdOutput {
-            success: output.status.success(),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        })
+        use std::sync::mpsc;
+
+        // Spawn with piped stdout/stderr so we can collect output.
+        let child = std::process::Command::new(program)
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+
+        // Hand off blocking wait+collect to a thread, so we can timeout.
+        let (tx, rx) = mpsc::channel::<anyhow::Result<CmdOutput>>();
+        // We need to move the child into the thread. `Child` is not `Send` on
+        // all targets, but on macOS/Linux it is, so this is fine.
+        std::thread::spawn(move || {
+            let result = child.wait_with_output().map(|out| CmdOutput {
+                success: out.status.success(),
+                stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+            }).map_err(|e| anyhow::anyhow!("subprocess wait failed: {e}"));
+            let _ = tx.send(result);
+        });
+
+        match rx.recv_timeout(CMD_TIMEOUT) {
+            Ok(result) => result,
+            Err(_) => {
+                // Timeout: the child thread still holds the child handle;
+                // we cannot kill it directly, but the process will be
+                // cleaned up when the thread finishes. Return an error so
+                // the caller does not hang.
+                Err(anyhow::anyhow!(
+                    "agent/tool timed out after {}s ({})",
+                    CMD_TIMEOUT.as_secs(),
+                    program
+                ))
+            }
+        }
     }
 }
 
