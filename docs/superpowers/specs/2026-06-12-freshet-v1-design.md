@@ -46,6 +46,8 @@ without colliding.
   for research + synthesis; design the §9 fallback ladder.
 - **Cadence:** manual + on-launch + per-stream **interval** (a small scheduler).
 - **Multiple streams**; pause / retire a stream.
+- **Version history** — a local git repo over the output folder; each refresh / `My notes` edit is
+  committed, giving per-document history, refresh-to-refresh diffs, and safe revert (backend phase).
 - **Stack:** Tauri 2 + Rust core + React/Vite frontend.
 
 **Out of scope (deferred)**
@@ -245,6 +247,19 @@ All three are built in the browser-mock loop first (mock bridge), then wired to 
     state/<id>.json             ← per-stream run state (seen ids, timestamps, digest)
 ```
 
+### Version history (local git)
+
+Freshet maintains a **local git repository** over the output folder, committing the living
+documents (and `## My notes` edits) on each change. This gives **per-document history** (how a
+topic's understanding evolved), **diffs between refreshes** (a literal file-level view of what
+changed), and **safe revert** of a bad synthesis — and is a natural substrate for the future
+cloud sync (vision §11). It is **complementary** to the state sidecar (§5.3): git is the
+human-facing history; the sidecar remains the mechanism for dedup / change-detection logic.
+
+**Must not hijack the user's vault VCS.** If the user already version-controls the folder, Freshet
+detects the existing `.git` and does not impose commits without opt-in. *(Open: whether the history
+lives in the root repo, a scoped repo Freshet owns, or is opt-in — §15.)*
+
 ## 11. Error handling
 
 - **Agent missing / none detected** → creation + refresh surface "no local agent available" with
@@ -300,3 +315,5 @@ acceptance criteria.
 - **Second-agent adapter** — which agent to use as the non-Claude proof (Codex assumed); how it sources
   without `last30days`.
 - **"Significance" threshold** — how aggressively to filter low-score new items out of "What changed".
+- **Git history location** — root repo vs. a scoped repo Freshet owns vs. opt-in, and how to coexist
+  with a vault the user already version-controls (§10 Version history).
