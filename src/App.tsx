@@ -1,10 +1,12 @@
-import { useState } from "react";
-import { BridgeProvider } from "./bridge/BridgeProvider";
+import { useState, useEffect } from "react";
+import { BridgeProvider, useBridge } from "./bridge/BridgeProvider";
 import { Desk } from "./views/Desk/Desk";
 import { Reading } from "./views/Reading/Reading";
 import { Create } from "./views/Create/Create";
+import { Onboarding } from "./views/Onboarding/Onboarding";
 import { useTheme } from "./theme/useTheme";
-import type { StreamSummary } from "./bridge/types";
+import type { StreamSummary, AgentStatus } from "./bridge/types";
+import type { Bridge } from "./bridge/Bridge";
 import "./App.css";
 
 type View =
@@ -63,10 +65,55 @@ function AppShell() {
   );
 }
 
-export default function App() {
+/**
+ * Gates the main app behind onboarding. On mount queries getOnboardingState();
+ * if not yet onboarded renders <Onboarding>; otherwise goes straight to the
+ * main shell. While loading shows a calm blank placeholder (no spinner gate).
+ */
+type GateState =
+  | { phase: "loading" }
+  | { phase: "onboarding"; agent?: AgentStatus | null }
+  | { phase: "app" };
+
+function GatedApp() {
+  const bridge = useBridge();
+  const [gate, setGate] = useState<GateState>({ phase: "loading" });
+
+  useEffect(() => {
+    bridge.getOnboardingState().then((state) => {
+      if (state.onboarded) {
+        setGate({ phase: "app" });
+      } else {
+        setGate({ phase: "onboarding", agent: state.agent ?? null });
+      }
+    });
+  }, [bridge]);
+
+  if (gate.phase === "loading") {
+    return <div className="ob-loading" aria-hidden />;
+  }
+
+  if (gate.phase === "onboarding") {
+    return (
+      <Onboarding
+        initialAgent={gate.agent}
+        onDone={() => setGate({ phase: "app" })}
+      />
+    );
+  }
+
+  return <AppShell />;
+}
+
+interface AppProps {
+  /** Optional bridge override — used in tests to inject a MockBridge. */
+  bridge?: Bridge;
+}
+
+export default function App({ bridge }: AppProps = {}) {
   return (
-    <BridgeProvider>
-      <AppShell />
+    <BridgeProvider bridge={bridge}>
+      <GatedApp />
     </BridgeProvider>
   );
 }

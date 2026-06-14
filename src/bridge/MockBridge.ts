@@ -19,6 +19,16 @@ const STORAGE_KEY = "freshet-mock";
 
 const MOCK_AGENT: AgentStatus = { kind: "claude_code", available: true, version: "mock" };
 
+export interface MockBridgeOptions {
+  /** Override the onboarding state returned by getOnboardingState/listAgents/recheckAgents.
+   *  Default: onboarded=true (keeps all existing tests unaffected). */
+  onboardingState?: {
+    onboarded: boolean;
+    hasRoot: boolean;
+    agent?: AgentStatus | null;
+  };
+}
+
 interface StoredState {
   summaries: StreamSummary[];
   descriptions: Record<string, StreamDescription>;
@@ -61,8 +71,9 @@ function seedState(): StoredState {
 export class MockBridge implements Bridge {
   private state: StoredState;
   private progressListeners: Array<(e: RefreshProgress) => void> = [];
+  private _onboardingState: { onboarded: boolean; hasRoot: boolean; agent?: AgentStatus | null };
 
-  constructor() {
+  constructor(options?: MockBridgeOptions) {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
@@ -73,6 +84,18 @@ export class MockBridge implements Bridge {
     } else {
       this.state = seedState();
     }
+
+    // Default: onboarded=true so all existing tests/surfaces are unaffected.
+    this._onboardingState = options?.onboardingState ?? {
+      onboarded: true,
+      hasRoot: true,
+      agent: { ...MOCK_AGENT },
+    };
+  }
+
+  /** Test helper: override the onboarding state after construction. */
+  __setOnboarding(state: { onboarded: boolean; hasRoot: boolean; agent?: AgentStatus | null }): void {
+    this._onboardingState = state;
   }
 
   private persist(): void {
@@ -84,28 +107,43 @@ export class MockBridge implements Bridge {
     this.persist();
   }
 
-  // ── Onboarding / config / agents (canned: existing surfaces unaffected) ──
+  // ── Onboarding / config / agents ─────────────────────────────────────────
   async getOnboardingState(): Promise<OnboardingState> {
-    return { onboarded: true, hasRoot: true, agent: { ...MOCK_AGENT } };
+    const { onboarded, hasRoot, agent } = this._onboardingState;
+    return {
+      onboarded,
+      hasRoot,
+      ...(agent != null ? { agent: { ...agent } } : {}),
+    };
   }
 
   async getConfig(): Promise<AppConfig> {
-    return { root: "/mock/vault", selectedAgent: "claude_code", onboarded: true };
+    return {
+      root: this._onboardingState.hasRoot ? "/mock/vault" : undefined,
+      selectedAgent: this._onboardingState.agent?.kind ?? undefined,
+      onboarded: this._onboardingState.onboarded,
+    };
   }
 
   async listAgents(): Promise<AgentStatus[]> {
-    return [{ ...MOCK_AGENT }];
+    const { agent } = this._onboardingState;
+    if (agent && agent.available) return [{ ...agent }];
+    return [];
   }
 
   async recheckAgents(): Promise<AgentStatus[]> {
-    return [{ ...MOCK_AGENT }];
+    return this.listAgents();
   }
 
-  async setRootFolder(_path: string): Promise<void> {}
+  async setRootFolder(_path: string): Promise<void> {
+    this._onboardingState = { ...this._onboardingState, hasRoot: true };
+  }
 
   async setDefaultAgent(_kind: AgentKind): Promise<void> {}
 
-  async completeOnboarding(): Promise<void> {}
+  async completeOnboarding(): Promise<void> {
+    this._onboardingState = { ...this._onboardingState, onboarded: true };
+  }
 
   async listStreams(): Promise<StreamSummary[]> {
     return this.state.summaries.map(s => ({ ...s }));

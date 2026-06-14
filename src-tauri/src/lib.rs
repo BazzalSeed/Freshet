@@ -29,6 +29,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Resolve the app-config dir (outside any stream root) and load the
             // app config from disk.
