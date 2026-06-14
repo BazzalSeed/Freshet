@@ -75,7 +75,7 @@ export class MockBridge implements Bridge {
 
   reset(): void {
     this.state = seedState();
-    localStorage.removeItem(STORAGE_KEY);
+    this.persist();
   }
 
   async listStreams(): Promise<StreamSummary[]> {

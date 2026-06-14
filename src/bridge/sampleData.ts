@@ -16,13 +16,13 @@ Largely standardized; the open fight is the protocol (MCP vs. bespoke). [^hn1]
 ## Open questions
 - Does MCP become the default tool protocol, or fragment? [^pm1]
 
-## My notes
-- Watching the MCP-vs-bespoke fight — revisit before Q3 planning.
-
 [^hn1]: hackernews · Claude Agent SDK v2 · 412 · 2026-06-11 · https://news.ycombinator.com/item?id=1
 [^r1]: reddit · Off ReAct loops in prod · 280 · 2026-06-10 · https://reddit.com/r/ml/1
 [^gh1]: github · anthropics/agent-sdk v2.0 · 1200 · 2026-06-09 · https://github.com/x
 [^pm1]: polymarket · MCP default by EOY · 61 · 2026-06-08 · https://polymarket.com/x
+
+## My notes
+- Watching the MCP-vs-bespoke fight — revisit before Q3 planning.
 `;
 
 export const sampleStreams: StreamSummary[] = [

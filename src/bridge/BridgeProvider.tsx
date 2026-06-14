@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type { Bridge } from "./Bridge";
 import { MockBridge } from "./MockBridge";
 
@@ -6,7 +6,7 @@ const BridgeContext = createContext<Bridge | null>(null);
 
 interface BridgeProviderProps {
   bridge?: Bridge;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export function BridgeProvider({ bridge, children }: BridgeProviderProps) {
