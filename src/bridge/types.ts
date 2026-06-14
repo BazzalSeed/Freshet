@@ -10,3 +10,9 @@ export interface DraftResult { draftMarkdown: string; proposedDescription: Strea
 export type RefreshPhase = "detecting" | "researching" | "synthesizing" | "done" | "error";
 export interface RefreshProgress { streamId: string; phase: RefreshPhase }
 export const FREE_SOURCES = ["reddit", "hackernews", "github", "polymarket"] as const;
+
+// ── Onboarding / config / agents ─────────────────────────────────────────────
+export type AgentKind = "claude_code" | "codex";
+export interface AgentStatus { kind: AgentKind; available: boolean; version?: string; path?: string }
+export interface OnboardingState { onboarded: boolean; hasRoot: boolean; agent?: AgentStatus }
+export interface AppConfig { root?: string; selectedAgent?: AgentKind; onboarded: boolean }

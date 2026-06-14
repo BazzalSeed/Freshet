@@ -7,11 +7,17 @@ import type {
   Summary,
   StreamStatus,
   RefreshProgress,
+  OnboardingState,
+  AppConfig,
+  AgentStatus,
+  AgentKind,
 } from "./types";
 import type { Bridge } from "./Bridge";
 import { sampleStreams, sampleDescriptions, sampleDocFor } from "./sampleData";
 
 const STORAGE_KEY = "freshet-mock";
+
+const MOCK_AGENT: AgentStatus = { kind: "claude_code", available: true, version: "mock" };
 
 interface StoredState {
   summaries: StreamSummary[];
@@ -77,6 +83,29 @@ export class MockBridge implements Bridge {
     this.state = seedState();
     this.persist();
   }
+
+  // ── Onboarding / config / agents (canned: existing surfaces unaffected) ──
+  async getOnboardingState(): Promise<OnboardingState> {
+    return { onboarded: true, hasRoot: true, agent: { ...MOCK_AGENT } };
+  }
+
+  async getConfig(): Promise<AppConfig> {
+    return { root: "/mock/vault", selectedAgent: "claude_code", onboarded: true };
+  }
+
+  async listAgents(): Promise<AgentStatus[]> {
+    return [{ ...MOCK_AGENT }];
+  }
+
+  async recheckAgents(): Promise<AgentStatus[]> {
+    return [{ ...MOCK_AGENT }];
+  }
+
+  async setRootFolder(_path: string): Promise<void> {}
+
+  async setDefaultAgent(_kind: AgentKind): Promise<void> {}
+
+  async completeOnboarding(): Promise<void> {}
 
   async listStreams(): Promise<StreamSummary[]> {
     return this.state.summaries.map(s => ({ ...s }));

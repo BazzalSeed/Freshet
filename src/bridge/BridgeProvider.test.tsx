@@ -35,3 +35,22 @@ test("useBridge throws when used outside provider", () => {
   expect(() => render(<StreamCountProbe />)).toThrow();
   spy.mockRestore();
 });
+
+test("BridgeProvider auto-selects MockBridge in jsdom (no Tauri global)", () => {
+  // jsdom defines `window` but neither `__TAURI_INTERNALS__` nor `__TAURI__`,
+  // so the provider should fall back to the mock.
+  expect("__TAURI_INTERNALS__" in window).toBe(false);
+  expect("__TAURI__" in window).toBe(false);
+
+  let captured: unknown = null;
+  function CaptureProbe() {
+    captured = useBridge();
+    return null;
+  }
+  render(
+    <BridgeProvider>
+      <CaptureProbe />
+    </BridgeProvider>
+  );
+  expect(captured).toBeInstanceOf(MockBridge);
+});

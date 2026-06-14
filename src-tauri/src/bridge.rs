@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::agent::discovery::CmdRunner;
 use crate::agent::{detect_agents, select_agent, Agent};
 use crate::commands::{self, AppConfig, DraftInput, DraftResult, GetStreamResult, OnboardingState};
-use crate::model::{AgentKind, AgentStatus, StreamDescription, StreamStatus, StreamSummary};
+use crate::model::{AgentKind, AgentStatus, StreamDescription, StreamStatus, StreamSummary, Summary};
 use crate::scheduler::{due_for_tick, runs_at_startup};
 use crate::sources::{registry, HttpClient, SourceProvider};
 use crate::store;
@@ -203,52 +203,58 @@ pub fn create_stream(
     estr(commands::create_stream(&root, &description, agent.as_ref(), &providers, &now_iso()))
 }
 
-/// Refresh a stream on a background task, emitting progress + completion events.
+/// Refresh a stream, awaiting the result and returning its [`Summary`].
 ///
-/// Returns immediately (the heavy work runs off the UI thread, honoring the
-/// non-blocking invariant). Progress flows to the frontend via the
-/// `refresh_progress` events and a terminal `stream_updated {streamId, changed}`
-/// event; the command itself resolves to `()` as soon as the task is spawned.
+/// The heavy work runs on a blocking task (off the UI thread). Because this is
+/// an `async` Tauri command, awaiting it does NOT block the webview — the
+/// frontend stays responsive while progress flows via `refresh_progress` and a
+/// terminal `stream_updated {streamId, changed}` event, then the command
+/// resolves to the `Summary` the caller awaits.
 #[tauri::command]
-pub fn refresh_stream(app: AppHandle, id: String) -> Result<(), String> {
-    // Spawn so the refresh never blocks the UI thread.
-    // UNVERIFIED: live path — runs a live agent + HTTP providers in a blocking task.
-    tauri::async_runtime::spawn_blocking(move || {
+pub async fn refresh_stream(app: AppHandle, id: String) -> Result<Summary, String> {
+    // Run on a blocking task so the engine work never blocks the async runtime,
+    // then await its result. UNVERIFIED: live path — runs a live agent + HTTP
+    // providers in a blocking task.
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<BackendState>();
-        run_refresh_emitting(&app, &state, &id);
-    });
-    Ok(())
+        run_refresh_emitting(&app, &state, &id)
+    })
+    .await
+    .map_err(|e| format!("refresh task panicked: {e}"))?;
+    estr(result)
 }
 
-/// The body of a background refresh: resolve root/agent/providers, run the
-/// engine, and emit `refresh_progress` + `stream_updated` events throughout.
+/// The body of a refresh: resolve root/agent/providers, run the engine, and
+/// emit `refresh_progress` + `stream_updated` events throughout. Returns the
+/// [`Summary`] so callers that await it (the command) get a result; the
+/// fire-and-forget background tasks ignore it.
 // UNVERIFIED: live path
-fn run_refresh_emitting(app: &AppHandle, state: &BackendState, id: &str) {
+fn run_refresh_emitting(
+    app: &AppHandle,
+    state: &BackendState,
+    id: &str,
+) -> anyhow::Result<Summary> {
     let _ = app.emit("refresh_progress", RefreshProgress { stream_id: id.into(), phase: "researching".into() });
 
-    let root = match state.root() {
-        Ok(r) => r,
-        Err(e) => return emit_error(app, id, &format!("{e:#}")),
-    };
-    let desc = match store::load_description(&root, id) {
-        Ok(d) => d,
-        Err(e) => return emit_error(app, id, &format!("{e:#}")),
-    };
-    let agent = match resolve_agent(state) {
-        Ok(a) => a,
-        Err(e) => return emit_error(app, id, &format!("{e:#}")),
-    };
-    let providers = resolve_providers(state, &desc.sources);
+    let result = (|| {
+        let root = state.root()?;
+        let desc = store::load_description(&root, id)?;
+        let agent = resolve_agent(state)?;
+        let providers = resolve_providers(state, &desc.sources);
 
-    let _ = app.emit("refresh_progress", RefreshProgress { stream_id: id.into(), phase: "synthesizing".into() });
+        let _ = app.emit("refresh_progress", RefreshProgress { stream_id: id.into(), phase: "synthesizing".into() });
 
-    match crate::engine::refresh(&root, &desc, agent.as_ref(), &providers, &now_iso()) {
+        crate::engine::refresh(&root, &desc, agent.as_ref(), &providers, &now_iso())
+    })();
+
+    match &result {
         Ok(summary) => {
             let _ = app.emit("refresh_progress", RefreshProgress { stream_id: id.into(), phase: "done".into() });
             let _ = app.emit("stream_updated", StreamUpdated { stream_id: id.into(), changed: summary.changed });
         }
         Err(e) => emit_error(app, id, &format!("{e:#}")),
     }
+    result
 }
 
 fn emit_error(app: &AppHandle, id: &str, _msg: &str) {
@@ -305,7 +311,8 @@ pub fn spawn_background_tasks(app: AppHandle) {
             let Ok(root) = state.root() else { return };
             for desc in store::list_descriptions(&root) {
                 if desc.status == StreamStatus::Active && runs_at_startup(&desc.cadence.mode) {
-                    run_refresh_emitting(&app, &state, &desc.id);
+                    // Fire-and-forget: events carry the outcome; ignore the Summary.
+                    let _ = run_refresh_emitting(&app, &state, &desc.id);
                 }
             }
         });
@@ -326,7 +333,8 @@ pub fn spawn_background_tasks(app: AppHandle) {
                     for desc in store::list_descriptions(&root) {
                         let st = store::load_state(&root, &desc.id);
                         if due_for_tick(&desc, &st, &now) {
-                            run_refresh_emitting(&app2, &state, &desc.id);
+                            // Fire-and-forget: events carry the outcome; ignore the Summary.
+                            let _ = run_refresh_emitting(&app2, &state, &desc.id);
                         }
                     }
                 });
