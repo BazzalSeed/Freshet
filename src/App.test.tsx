@@ -33,10 +33,10 @@ test("a back control in Reading returns to Desk", async () => {
   expect(await screen.findByRole("button", { name: /new stream/i })).toBeInTheDocument();
 });
 
-test("theme toggle button is present", async () => {
+test("no manual theme toggle — appearance is purely adaptive", async () => {
   render(<App />);
   await screen.findByText("AI Agents");
-  expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /toggle theme/i })).not.toBeInTheDocument();
 });
 
 test("New stream navigates to Create and Cancel returns to Desk", async () => {

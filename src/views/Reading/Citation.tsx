@@ -1,48 +1,43 @@
-import * as Popover from "@radix-ui/react-popover";
+import { type ReactNode } from "react";
 import type { Citation as CitationType } from "../../lib/parseDoc";
 import "./Citation.css";
 
 const SOURCE_LABELS: Record<string, string> = {
-  hackernews: "HN",
+  hackernews: "Hacker News",
   reddit: "Reddit",
   github: "GitHub",
   polymarket: "Polymarket",
 };
 
-function sourceLabel(source: string): string {
+export function sourceLabel(source: string): string {
   return SOURCE_LABELS[source] ?? source;
 }
 
-export function Citation({ citation }: { citation: CitationType }) {
-  const { source, title, score, date, url } = citation;
-  const chipLabel = score !== undefined ? `${sourceLabel(source)} ${score}` : sourceLabel(source);
-
-  const meta = [source, score !== undefined ? String(score) : null, date]
-    .filter((part): part is string => Boolean(part))
-    .join(" · ");
-
+/**
+ * An in-document citation: a restrained superscript marker (the footnote number).
+ * Clicking it reveals and highlights the matching source in the Sources panel
+ * (opening the page itself is a deliberate click on the source card). The native
+ * tooltip names the source on hover.
+ */
+export function Citation({
+  citation,
+  label,
+  onCite,
+}: {
+  citation: CitationType;
+  label?: ReactNode;
+  onCite: (citationId: string) => void;
+}) {
+  const { id, source, title, url } = citation;
   return (
-    <Popover.Root>
-      <Popover.Trigger asChild>
-        <button type="button" className="citation-chip">
-          {chipLabel}
-        </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content className="citation-popover" sideOffset={4} collisionPadding={8}>
-          <div className="citation-title">{title}</div>
-          <div className="citation-meta">{meta}</div>
-          <a
-            className="citation-link"
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            open ↗
-          </a>
-          <Popover.Arrow className="citation-arrow" />
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+    <button
+      type="button"
+      className="citation-ref"
+      title={`${sourceLabel(source)} — ${title || url}`}
+      aria-label={`Show source: ${title || sourceLabel(source)}`}
+      onClick={() => onCite(id)}
+    >
+      {label ?? "•"}
+    </button>
   );
 }

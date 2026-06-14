@@ -10,7 +10,7 @@ if (!("ResizeObserver" in globalThis)) {
   globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 }
 
-// jsdom lacks window.matchMedia, required by useTheme.
+// jsdom lacks window.matchMedia, which CodeMirror and other libs probe.
 if (typeof window !== "undefined" && !window.matchMedia) {
   window.matchMedia = (query: string) =>
     ({

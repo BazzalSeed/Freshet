@@ -15,6 +15,7 @@ export function Chrome({
   onToggleSources,
   onBack,
   onRefresh,
+  scrolled,
 }: {
   title: string;
   updatedLabel?: string;
@@ -24,9 +25,11 @@ export function Chrome({
   onToggleSources: () => void;
   onBack: () => void;
   onRefresh: () => void;
+  /** When the document has scrolled, the bar lifts off the page (border + shadow). */
+  scrolled?: boolean;
 }) {
   return (
-    <header className="chrome">
+    <header className="chrome" data-scrolled={scrolled ? "" : undefined}>
       <div className="chrome-left">
         <button
           type="button"

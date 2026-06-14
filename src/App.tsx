@@ -4,7 +4,6 @@ import { Desk } from "./views/Desk/Desk";
 import { Reading } from "./views/Reading/Reading";
 import { Create } from "./views/Create/Create";
 import { Onboarding } from "./views/Onboarding/Onboarding";
-import { useTheme } from "./theme/useTheme";
 import type { StreamSummary, AgentStatus } from "./bridge/types";
 import type { Bridge } from "./bridge/Bridge";
 import "./App.css";
@@ -13,21 +12,6 @@ type View =
   | { kind: "desk" }
   | { kind: "reading"; id: string }
   | { kind: "create" };
-
-function ThemeToggle() {
-  const { theme, toggle } = useTheme();
-  return (
-    <button
-      className="app-theme-toggle"
-      aria-label="Toggle theme"
-      onClick={toggle}
-      type="button"
-      title={theme === "dark" ? "Switch to light" : "Switch to dark"}
-    >
-      {theme === "dark" ? "☀" : "☾"}
-    </button>
-  );
-}
 
 function AppShell() {
   const [view, setView] = useState<View>({ kind: "desk" });
@@ -50,8 +34,6 @@ function AppShell() {
 
   return (
     <div className="app">
-      <ThemeToggle />
-
       {view.kind === "desk" && (
         <Desk onOpen={handleOpen} onNew={handleNew} />
       )}

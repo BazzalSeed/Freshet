@@ -297,6 +297,13 @@ Tracking: ${input.topic}.
     this.persist();
   }
 
+  async openUrl(url: string): Promise<void> {
+    // Browser/dev fallback: the native bridge opens an in-app webview window.
+    if (typeof window !== "undefined" && typeof window.open === "function") {
+      window.open(url, "_blank", "noopener");
+    }
+  }
+
   onRefreshProgress(cb: (e: RefreshProgress) => void): () => void {
     this.progressListeners.push(cb);
     return () => {

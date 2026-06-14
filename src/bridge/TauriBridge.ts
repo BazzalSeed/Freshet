@@ -84,6 +84,10 @@ export class TauriBridge implements Bridge {
     return invoke<void>("save_notes", { id, markdown });
   }
 
+  openUrl(url: string): Promise<void> {
+    return invoke<void>("open_url", { url });
+  }
+
   onRefreshProgress(cb: (e: RefreshProgress) => void): () => void {
     // `listen` returns a Promise<UnlistenFn>; we expose a synchronous unlisten
     // that awaits and invokes the real unlistener once it's available.

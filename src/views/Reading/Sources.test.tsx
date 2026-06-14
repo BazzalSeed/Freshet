@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { Citation } from "../../lib/parseDoc";
 import { Sources } from "./Sources";
 
@@ -10,15 +11,22 @@ const sources: Citation[] = [
 ];
 
 test("header shows the count", () => {
-  render(<Sources sources={sources} />);
+  render(<Sources sources={sources} onOpenUrl={() => {}} />);
   const header = screen.getByText(/Sources/);
   expect(header).toHaveTextContent("Sources");
   expect(header).toHaveTextContent("4");
 });
 
-test("renders each source title", () => {
-  render(<Sources sources={sources} />);
+test("renders each source as a clickable name", () => {
+  render(<Sources sources={sources} onOpenUrl={() => {}} />);
   for (const s of sources) {
-    expect(screen.getByText(s.title)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: s.title })).toBeInTheDocument();
   }
+});
+
+test("clicking a source name opens its url in-app", async () => {
+  const onOpenUrl = vi.fn();
+  render(<Sources sources={sources} onOpenUrl={onOpenUrl} />);
+  await userEvent.click(screen.getByRole("button", { name: "anthropics/agent-sdk v2.0" }));
+  expect(onOpenUrl).toHaveBeenCalledWith("https://x/3");
 });

@@ -10,15 +10,19 @@ const c = {
   url: "https://x",
 };
 
-test("chip opens popover with source", async () => {
-  render(<Citation citation={c as any} />);
-  expect(screen.getByText(/412/)).toBeInTheDocument();
+test("clicking the marker reveals its source (by id)", async () => {
+  const onCite = vi.fn();
+  render(<Citation citation={c as any} label={1} onCite={onCite} />);
   await userEvent.click(screen.getByRole("button"));
-  expect(await screen.findByText("Claude Agent SDK v2")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /open/i })).toHaveAttribute("href", "https://x");
+  expect(onCite).toHaveBeenCalledWith("hn1");
 });
 
-test("chip label abbreviates known sources", () => {
-  render(<Citation citation={c as any} />);
-  expect(screen.getByRole("button")).toHaveTextContent("HN 412");
+test("renders the footnote label as the marker", () => {
+  render(<Citation citation={c as any} label={3} onCite={() => {}} />);
+  expect(screen.getByRole("button")).toHaveTextContent("3");
+});
+
+test("names its source for hover/assistive tech", () => {
+  render(<Citation citation={c as any} label={1} onCite={() => {}} />);
+  expect(screen.getByRole("button")).toHaveAccessibleName(/Claude Agent SDK v2/i);
 });

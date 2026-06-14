@@ -32,4 +32,7 @@ export interface Bridge {
   setStreamStatus(id: string, status: StreamStatus): Promise<void>;
   saveNotes(id: string, markdown: string): Promise<void>;
   onRefreshProgress(cb: (e: RefreshProgress) => void): () => void;
+
+  /** Open a web reference URL in-app (a reusable webview window). */
+  openUrl(url: string): Promise<void>;
 }

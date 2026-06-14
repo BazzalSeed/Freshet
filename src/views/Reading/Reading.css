@@ -1,7 +1,11 @@
 .reading {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* Exactly viewport-tall so the document column scrolls INSIDE the shell and
+     the Chrome bar stays pinned (the parent .app only sets min-height, which
+     isn't a definite height for the % chain to resolve against). */
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg);
   color: var(--fg);
 }

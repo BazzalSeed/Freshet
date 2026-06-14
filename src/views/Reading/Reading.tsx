@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useBridge } from "../../bridge/BridgeProvider";
 import { asFreshetError } from "../../bridge/types";
-import type { FreshetError } from "../../bridge/types";
+import type { FreshetError, StreamDescription } from "../../bridge/types";
 import { parseDoc } from "../../lib/parseDoc";
 import { AgentNotice } from "../../components/AgentNotice";
 import { Chrome } from "./Chrome";
@@ -26,14 +26,20 @@ export function Reading({
 }) {
   const bridge = useBridge();
   const [markdown, setMarkdown] = useState<string | null>(null);
+  const [description, setDescription] = useState<StreamDescription | null>(null);
   const [showOutline, setShowOutline] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const [highlightSourceId, setHighlightSourceId] = useState<string | null>(null);
+  const [scrolled, setScrolled] = useState(false);
   const [refreshError, setRefreshError] = useState<FreshetError | null>(null);
 
   useEffect(() => {
     let active = true;
     bridge.getStream(streamId).then((r) => {
-      if (active) setMarkdown(r.documentMarkdown);
+      if (active) {
+        setMarkdown(r.documentMarkdown);
+        setDescription(r.description);
+      }
     });
     return () => {
       active = false;
@@ -42,12 +48,17 @@ export function Reading({
 
   const doc = useMemo(() => (markdown ? parseDoc(markdown) : null), [markdown]);
 
+  // The stream title is authoritative from its description (the document body is
+  // the agent-owned movements), so it shows even if the markdown has no header.
+  const title = description?.title ?? doc?.title ?? "";
+
   const handleRefresh = async () => {
     setRefreshError(null);
     try {
       await bridge.refreshStream(streamId);
       const r = await bridge.getStream(streamId);
       setMarkdown(r.documentMarkdown);
+      setDescription(r.description);
     } catch (e) {
       setRefreshError(asFreshetError(e));
     }
@@ -63,16 +74,29 @@ export function Reading({
     await bridge.saveNotes(streamId, block);
     const r = await bridge.getStream(streamId);
     setMarkdown(r.documentMarkdown);
+    setDescription(r.description);
   };
 
   const onJump = (id: string) => {
     document.getElementById(id)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
   };
 
+  // A regular link in the document opens in-app.
+  const onOpenUrl = (url: string) => {
+    void bridge.openUrl(url);
+  };
+
+  // A citation marker reveals the Sources panel and highlights its source —
+  // opening the actual page is a deliberate second click on the source card.
+  const onCite = (id: string) => {
+    setShowSources(true);
+    setHighlightSourceId(id);
+  };
+
   return (
     <div className="reading">
       <Chrome
-        title={doc?.title ?? ""}
+        title={title}
         updatedLabel={doc?.updatedLabel}
         showOutline={showOutline}
         showSources={showSources}
@@ -80,6 +104,7 @@ export function Reading({
         onToggleSources={() => setShowSources((v) => !v)}
         onBack={onBack}
         onRefresh={handleRefresh}
+        scrolled={scrolled}
       />
 
       {refreshError && (
@@ -99,10 +124,26 @@ export function Reading({
           data-sources={showSources ? "" : undefined}
         >
           {showOutline ? <Outline outline={doc.outline} onJump={onJump} /> : null}
-          <div className="reading-center">
-            <Document doc={doc} onSaveNotes={handleSaveNotes} />
+          <div
+            className="reading-center"
+            onScroll={(e) => setScrolled(e.currentTarget.scrollTop > 4)}
+          >
+            <Document
+              doc={doc}
+              title={title}
+              onSaveNotes={handleSaveNotes}
+              onOpenUrl={onOpenUrl}
+              onCite={onCite}
+            />
           </div>
-          {showSources ? <Sources sources={doc.sources} /> : null}
+          {showSources ? (
+            <Sources
+              sources={doc.sources}
+              onOpenUrl={onOpenUrl}
+              highlightId={highlightSourceId}
+              onHighlightConsumed={() => setHighlightSourceId(null)}
+            />
+          ) : null}
         </div>
       ) : (
         <div className="reading-empty" aria-hidden />
