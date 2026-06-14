@@ -96,6 +96,12 @@ never knows whether a human or a future chat produced it.*
 
 ### 5.2 Living document — `<root>/<title>.md`, plain markdown, "what changed" on top
 
+**Ownership (model B).** Freshet **owns** three sections — What changed · Current understanding ·
+Open questions — and rewrites them on refresh. The **`## My notes` block at the bottom is the
+user's**: Freshet reads it, preserves it **verbatim**, and never edits it. (If the user edits a
+Freshet-owned section in an external app, the next refresh overwrites it; `## My notes` is the
+safe place to annotate.)
+
 ```markdown
 # AI Agents
 _updated 2026-06-12 14:03_
@@ -108,6 +114,10 @@ _updated 2026-06-12 14:03_
 
 ## Open questions
 - …kept honestly open…
+
+## My notes
+<!-- yours — Freshet never edits anything below this heading -->
+- …your annotations…
 ```
 
 ### 5.3 State sidecar — `<root>/.freshet/state/<id>.json`, hidden, never shown to the note app
@@ -151,6 +161,7 @@ commands:
   generate_first_draft(input: DraftInput) -> { draft_markdown, proposed_description }
   create_stream(description) -> StreamSummary
   refresh_stream(id) -> Summary{ changed: bool, n_new: u32 }
+  save_notes(id, markdown)                 // persist the user's `## My notes` block only
   set_stream_status(id, status)            // pause / retire / reactivate
   get_config() / set_root_folder(path)
   list_agents() -> [AgentInfo{ kind, available }]
@@ -189,9 +200,14 @@ On refresh for a stream:
 3. **Dedup**: `new = brief.items` whose source-qualified id ∉ `seen_item_ids`.
 4. **If `new` is empty** → record `last_checked_at`; emit `done` ("nothing new"); **no
    `synthesize` call**. (Restraint + cheap.)
-5. **Else** → `synthesize(prior_document + new items)` → updated document with **"What changed"**
-   populated from `new`; atomically write the document; update state (`seen_item_ids += new ids`,
+5. **Else** → reconcile **incrementally**: extract the user's `## My notes` block; `synthesize(prior
+   Freshet-owned doc + new items)` → fold `new` into "Current understanding" (never regenerate from
+   scratch), rewrite "What changed" to this delta, update "Open questions"; **re-attach `## My notes`
+   verbatim**; atomically write the document; update state (`seen_item_ids += new ids`,
    `last_changed_at`, `doc_digest`); emit `done` (changed) + `stream_updated`.
+
+The user's `## My notes` block (model B, §5.2) is **never** sent to the agent for rewriting and is
+always preserved byte-for-byte across refreshes.
 
 Significance: because `last30days` items carry engagement scores, the engine can prefer
 significant new items and keep low-signal noise out of "What changed".
@@ -205,7 +221,8 @@ significant new items and keep low-signal noise out of "What changed".
   "something moved" mark when `changed_since_seen`; a per-stream and global "Refresh now"; pause/retire.
   No badges, no counts, no spinners gating the view.
 - **Reading view** — renders `document_markdown` (What changed → Current understanding → Open
-  questions). Plain, legible typography; the *signature* reconcile animation is deferred.
+  questions) **read-only**, with the `## My notes` block **editable** and saved via `save_notes`.
+  Plain, legible typography; the *signature* reconcile animation is deferred.
 
 All three are built in the browser-mock loop first (mock bridge), then wired to real Tauri commands.
 
