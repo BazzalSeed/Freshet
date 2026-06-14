@@ -8,6 +8,15 @@ how the team is orchestrated, and [`docs/rust-primer.md`](../../rust-primer.md) 
 > This supersedes the earlier "walking skeleton" framing. v1 is functional but **not
 > polished** — UI craft/animation and credentialed sources are deliberately deferred.
 
+> **Update (2026-06-14) — the backend + two refinements live in
+> [Backend & Core Features](./2026-06-14-backend-and-core-features-design.md):**
+> (1) **stream creation is now a chat** (collaborative scoping → description + first draft); the
+> form becomes its editable *result*, not the entry point. (2) **First-run onboarding** is designed
+> there (welcome → root folder → agent detection → first stream). (3) **Sourcing moved** from "the
+> agent runs `last30days`" to a pluggable **`SourceProvider`** — Rust fetches the free channels
+> directly (agent-agnostic; the `Agent` now only *synthesizes*, not *researches*). Where this spec
+> and that one differ on the backend, **that one wins**.
+
 ---
 
 ## 1. Purpose
