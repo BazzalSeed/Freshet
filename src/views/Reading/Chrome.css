@@ -1,0 +1,74 @@
+.chrome {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  height: 3rem;
+  padding: 0 0.75rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.chrome-left {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  justify-self: start;
+}
+
+.chrome-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-self: end;
+}
+
+.chrome-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chrome-title-word + .chrome-title-word {
+  margin-left: 0.3em;
+}
+
+.chrome-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chrome-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.chrome-btn[aria-pressed="true"] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.chrome-updated {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}

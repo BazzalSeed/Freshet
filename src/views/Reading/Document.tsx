@@ -63,7 +63,13 @@ export function Document({
         </ul>
       </section>
 
-      <section className="document-section" aria-labelledby="sec-my-notes">
+      {/*
+        No aria-labelledby here: the editable textarea below already carries
+        aria-label="My notes" as the meaningful control label. Labelling the
+        section with the same text would expose two "My notes" accessible
+        elements (section + control), so we let the heading stand on its own.
+      */}
+      <section className="document-section">
         <h2 id="sec-my-notes" className="section-label">
           My notes
         </h2>
