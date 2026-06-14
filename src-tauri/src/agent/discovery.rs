@@ -22,7 +22,14 @@ pub struct CmdOutput {
 /// One method: run a program with args, get structured output back.
 /// Real impl shells out via `std::process::Command`; tests use `FakeCmdRunner`.
 pub trait CmdRunner: Send + Sync {
-    fn run(&self, program: &str, args: &[&str]) -> anyhow::Result<CmdOutput>;
+    /// Run `program` with `args` in the given working directory.
+    /// `cwd = None` means "inherit the current process's working directory".
+    fn run_in(&self, program: &str, args: &[&str], cwd: Option<&Path>) -> anyhow::Result<CmdOutput>;
+
+    /// Convenience wrapper: run with inherited cwd.
+    fn run(&self, program: &str, args: &[&str]) -> anyhow::Result<CmdOutput> {
+        self.run_in(program, args, None)
+    }
 }
 
 /// Production runner using `std::process::Command`.
@@ -40,15 +47,18 @@ const CMD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 impl CmdRunner for RealCmdRunner {
     // UNVERIFIED: live path
-    fn run(&self, program: &str, args: &[&str]) -> anyhow::Result<CmdOutput> {
+    fn run_in(&self, program: &str, args: &[&str], cwd: Option<&Path>) -> anyhow::Result<CmdOutput> {
         use std::sync::mpsc;
 
         // Spawn with piped stdout/stderr so we can collect output.
-        let child = std::process::Command::new(program)
-            .args(args)
+        let mut cmd = std::process::Command::new(program);
+        cmd.args(args)
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
+            .stderr(std::process::Stdio::piped());
+        if let Some(dir) = cwd {
+            cmd.current_dir(dir);
+        }
+        let child = cmd.spawn()?;
 
         // Hand off blocking wait+collect to a thread, so we can timeout.
         let (tx, rx) = mpsc::channel::<anyhow::Result<CmdOutput>>();
@@ -115,7 +125,8 @@ impl Default for FakeCmdRunner {
 }
 
 impl CmdRunner for FakeCmdRunner {
-    fn run(&self, program: &str, args: &[&str]) -> anyhow::Result<CmdOutput> {
+    /// FakeCmdRunner ignores cwd — it just returns the mapped output.
+    fn run_in(&self, program: &str, args: &[&str], _cwd: Option<&Path>) -> anyhow::Result<CmdOutput> {
         Ok(self
             .responses
             .get(&Self::key(program, args))
@@ -396,5 +407,42 @@ mod tests {
         }
         assert!(!claude_candidates().is_empty());
         assert!(!codex_candidates().is_empty());
+    }
+
+    /// FakeCmdRunner::run_in with Some(cwd) still returns the mapped output.
+    /// The cwd argument is ignored by the fake, which is the intended contract.
+    #[test]
+    fn fake_runner_run_in_with_cwd_returns_mapped_output() {
+        let runner = FakeCmdRunner::new().with(
+            "mytool",
+            &["--flag"],
+            CmdOutput {
+                success: true,
+                stdout: "hello".to_string(),
+                stderr: String::new(),
+            },
+        );
+        let out = runner
+            .run_in("mytool", &["--flag"], Some(Path::new("/tmp")))
+            .unwrap();
+        assert!(out.success);
+        assert_eq!(out.stdout, "hello");
+    }
+
+    /// FakeCmdRunner::run (the convenience wrapper) still works after refactor.
+    #[test]
+    fn fake_runner_run_delegates_to_run_in_none() {
+        let runner = FakeCmdRunner::new().with(
+            "mytool",
+            &["--flag"],
+            CmdOutput {
+                success: true,
+                stdout: "world".to_string(),
+                stderr: String::new(),
+            },
+        );
+        let out = runner.run("mytool", &["--flag"]).unwrap();
+        assert!(out.success);
+        assert_eq!(out.stdout, "world");
     }
 }

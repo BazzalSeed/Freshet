@@ -65,8 +65,10 @@ impl Agent for CodexAgent {
             path,
             &arg_refs[..arg_refs.len().min(4)],
         );
+        // Spawn in a neutral directory (temp) so codex does not pick up the
+        // app's CLAUDE.md or project hooks from the Freshet source tree.
         // UNVERIFIED: live path
-        let out = self.runner.run(path, &arg_refs)?;
+        let out = self.runner.run_in(path, &arg_refs, Some(&std::env::temp_dir()))?;
         if !out.success {
             // Include both stderr and stdout so auth errors (often on stdout)
             // are surfaced to the UI rather than being swallowed.
@@ -96,8 +98,9 @@ impl Agent for CodexAgent {
             &arg_refs[..arg_refs.len().min(2)],
             history.len(),
         );
+        // Spawn in a neutral directory (temp) — same rationale as synthesize.
         // UNVERIFIED: live path
-        let out = self.runner.run(path, &arg_refs)?;
+        let out = self.runner.run_in(path, &arg_refs, Some(&std::env::temp_dir()))?;
         if !out.success {
             let detail = non_empty_detail(&out.stdout, &out.stderr);
             log::error!(

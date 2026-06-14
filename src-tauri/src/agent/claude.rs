@@ -23,16 +23,16 @@ impl ClaudeAgent {
 /// Kept pure so the flag set is unit-testable without spawning anything.
 pub fn build_synthesize_args(prompt: &str) -> Vec<String> {
     // Synthesis is tool-less text generation; no --permission-mode needed.
-    vec![
-        "-p".to_string(),
-        prompt.to_string(),
-        "--bare".to_string(),
-    ]
+    // --bare is intentionally absent: it bypasses the user's logged-in session,
+    // causing "Not logged in" errors. The session is instead isolated by spawning
+    // claude in a neutral temp directory (no CLAUDE.md) — see synthesize/chat.
+    vec!["-p".to_string(), prompt.to_string()]
 }
 
 /// Build the argv (after the program) for a chat invocation.
 pub fn build_chat_args(prompt: &str) -> Vec<String> {
-    vec!["-p".to_string(), prompt.to_string(), "--bare".to_string()]
+    // Same reasoning as build_synthesize_args: --bare skips the auth session.
+    vec!["-p".to_string(), prompt.to_string()]
 }
 
 /// Parse an optional proposed `StreamDescription` from a fenced ```json block.
@@ -60,8 +60,10 @@ impl Agent for ClaudeAgent {
             path,
             &arg_refs[..arg_refs.len().min(4)], // first flags only, not the full prompt
         );
+        // Spawn in a neutral directory (temp) so claude does not pick up the
+        // app's CLAUDE.md or project hooks from the Freshet source tree.
         // UNVERIFIED: live path
-        let out = self.runner.run(path, &arg_refs)?;
+        let out = self.runner.run_in(path, &arg_refs, Some(&std::env::temp_dir()))?;
         if !out.success {
             // Include both stderr and stdout so messages like
             // "Not logged in · Please run /login" (which claude may emit on
@@ -92,8 +94,9 @@ impl Agent for ClaudeAgent {
             &arg_refs[..arg_refs.len().min(2)],
             history.len(),
         );
+        // Spawn in a neutral directory (temp) — same rationale as synthesize.
         // UNVERIFIED: live path
-        let out = self.runner.run(path, &arg_refs)?;
+        let out = self.runner.run_in(path, &arg_refs, Some(&std::env::temp_dir()))?;
         if !out.success {
             let detail = non_empty_detail(&out.stdout, &out.stderr);
             log::error!(
@@ -168,7 +171,7 @@ mod tests {
             stderr: String,
         }
         impl CmdRunner for AlwaysFailRunner {
-            fn run(&self, _program: &str, _args: &[&str]) -> anyhow::Result<CmdOutput> {
+            fn run_in(&self, _program: &str, _args: &[&str], _cwd: Option<&std::path::Path>) -> anyhow::Result<CmdOutput> {
                 Ok(CmdOutput {
                     success: false,
                     stdout: self.stdout.clone(),
@@ -210,7 +213,7 @@ mod tests {
             stderr: String,
         }
         impl CmdRunner for AlwaysFailRunner {
-            fn run(&self, _program: &str, _args: &[&str]) -> anyhow::Result<CmdOutput> {
+            fn run_in(&self, _program: &str, _args: &[&str], _cwd: Option<&std::path::Path>) -> anyhow::Result<CmdOutput> {
                 Ok(CmdOutput {
                     success: false,
                     stdout: self.stdout.clone(),
@@ -248,7 +251,11 @@ mod tests {
         let args = build_synthesize_args("PROMPT");
         assert!(args.contains(&"-p".to_string()), "missing -p: {args:?}");
         assert!(args.contains(&"PROMPT".to_string()));
-        assert!(args.contains(&"--bare".to_string()), "missing --bare: {args:?}");
+        // --bare bypasses the user's logged-in session → must NOT appear.
+        assert!(
+            !args.contains(&"--bare".to_string()),
+            "--bare must not appear in synthesize argv (it skips auth): {args:?}"
+        );
         // Synthesis is tool-less; --permission-mode must NOT appear (it was
         // previously passed without its required value, which claude rejects).
         assert!(
@@ -258,7 +265,7 @@ mod tests {
         // Verify no dangling value-expecting flag at the end of the argv.
         let last = args.last().map(String::as_str).unwrap_or("");
         assert!(
-            !last.starts_with("--") || last == "--bare",
+            !last.starts_with("--"),
             "argv must not end on a value-expecting flag: {args:?}"
         );
         // -p must immediately precede the prompt.
@@ -270,7 +277,11 @@ mod tests {
     fn chat_args_have_expected_flags() {
         let args = build_chat_args("HELLO");
         assert!(args.contains(&"-p".to_string()));
-        assert!(args.contains(&"--bare".to_string()));
+        // --bare bypasses the user's logged-in session → must NOT appear.
+        assert!(
+            !args.contains(&"--bare".to_string()),
+            "--bare must not appear in chat argv (it skips auth): {args:?}"
+        );
         assert!(args.contains(&"HELLO".to_string()));
         // Neither synthesize nor chat should carry --permission-mode.
         assert!(
