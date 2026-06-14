@@ -36,6 +36,9 @@ files only reproduces under `npm run tauri dev`.
 ## Prerequisites
 
 - **Node** + **Rust** (`rustup`) + **Xcode Command Line Tools**.
+  - **`cargo` must be on PATH** — `npm run tauri dev` shells out to `cargo`. If you see
+    `failed to run 'cargo metadata' … No such file or directory`, your shell hasn't loaded Rust's
+    PATH. Fix: `source "$HOME/.cargo/env"` (or open a new terminal). Verify: `cargo --version`.
 - For the real agent path: **`claude` (Claude Code) installed and logged in**. Verify in your
   terminal: `claude -p "say hi"` should reply (not "Not logged in"). If it says not logged in,
   run `claude` → `/login` once.
