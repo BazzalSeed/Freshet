@@ -1,0 +1,151 @@
+.document {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 4rem;
+  color: var(--fg);
+}
+
+.document-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.document-updated {
+  margin: 0.5rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+/* ── Movement labels (## headings) ── */
+.section-label {
+  margin: 2.25rem 0 0.85rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.section-label[data-accent] {
+  color: var(--accent);
+}
+
+.subsection-heading {
+  margin: 1.5rem 0 0.4rem;
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* ── Rendered markdown body ── */
+.document-body {
+  font-family: var(--serif);
+  font-size: 1.08rem;
+  line-height: 1.7;
+  color: var(--fg);
+}
+
+.document-body p {
+  margin: 0 0 0.9rem;
+}
+
+.document-body ul,
+.document-body ol {
+  margin: 0 0 0.9rem;
+  padding-left: 1.2rem;
+}
+
+.document-body li {
+  margin-bottom: 0.45rem;
+}
+
+.document-body li::marker {
+  color: var(--muted-2);
+}
+
+.document-body strong {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.document-body em {
+  font-style: italic;
+}
+
+.document-body code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  padding: 0.08em 0.34em;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.document-body pre {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.document-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.document-body blockquote {
+  margin: 0 0 1rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--rule);
+  color: var(--muted);
+}
+
+.document-body a.doc-link {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-tint);
+  cursor: pointer;
+}
+
+.document-body a.doc-link:hover {
+  border-bottom-color: var(--accent);
+}
+
+/* ── My notes — a visually distinct "your space" surface ── */
+.my-notes-section {
+  margin-top: 3rem;
+  padding: 1.5rem 1.5rem 1.25rem;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.my-notes-rail {
+  margin-bottom: 0.85rem;
+}
+
+.my-notes-label {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.my-notes-hint {
+  margin: 0.25rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted-2);
+}

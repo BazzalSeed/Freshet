@@ -1,0 +1,49 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": "t3_abc123",
+    "before": null,
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "abc123",
+          "title": "Rust is now the #2 most used language for Linux kernel development",
+          "permalink": "/r/rust/comments/abc123/rust_is_now_the_2_most_used_language/",
+          "url": "https://lkml.org/lkml/2026/6/10/rust-kernel",
+          "score": 4820,
+          "num_comments": 312,
+          "created_utc": 1749600000.0,
+          "subreddit": "rust"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "def456",
+          "title": "I built a terminal UI file manager in pure Rust",
+          "permalink": "/r/rust/comments/def456/i_built_a_terminal_ui_file_manager/",
+          "url": "https://github.com/example/rustfm",
+          "score": 1203,
+          "num_comments": 88,
+          "created_utc": 1749520000.0,
+          "subreddit": "rust"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "ghi789",
+          "title": "Understanding lifetimes once and for all",
+          "permalink": "/r/learnrust/comments/ghi789/understanding_lifetimes_once_and_for_all/",
+          "url": "https://blog.example.com/rust-lifetimes",
+          "score": 892,
+          "num_comments": 55,
+          "created_utc": 1749440000.0,
+          "subreddit": "learnrust"
+        }
+      }
+    ],
+    "dist": 3
+  }
+}

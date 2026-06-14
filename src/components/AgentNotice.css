@@ -1,0 +1,131 @@
+/* AgentNotice — calm, structural, not alarming.
+   Uses design tokens: --bg --surface --ink --fg --muted --rule --accent --serif --mono */
+
+.agent-notice {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.agent-notice-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.agent-notice-icon {
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.agent-notice-title {
+  font-family: var(--serif);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.agent-notice-message {
+  font-size: 0.875rem;
+  color: var(--fg);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.agent-notice-hint {
+  font-size: 0.8125rem;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.agent-notice-step-text {
+  font-size: 0.875rem;
+  color: var(--fg);
+  margin: 0 0 0.375rem;
+}
+
+.agent-notice-steps {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.agent-notice-steps li {
+  font-size: 0.875rem;
+  color: var(--fg);
+  line-height: 1.5;
+}
+
+.agent-notice-code {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.0625rem 0.3125rem;
+  color: var(--ink);
+}
+
+.agent-notice-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.agent-notice-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.agent-notice-link:hover {
+  text-decoration: underline;
+}
+
+.agent-notice-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.agent-notice-btn {
+  padding: 0.375rem 0.875rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  border: 1px solid var(--rule);
+  line-height: 1.4;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.agent-notice-btn-primary {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.agent-notice-btn-primary:hover {
+  opacity: 0.85;
+}
+
+.agent-notice-btn-secondary {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--rule);
+}
+
+.agent-notice-btn-secondary:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}

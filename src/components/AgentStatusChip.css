@@ -1,0 +1,122 @@
+/* AgentStatusChip — persistent agent status in the app header.
+   Uses design tokens: --bg --surface --ink --fg --muted --rule --accent --serif --mono */
+
+.agent-chip-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.agent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: var(--mono);
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.agent-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* State modifiers */
+.agent-chip--ok {
+  color: var(--muted);
+  border-color: var(--rule);
+}
+
+.agent-chip--ok:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+
+.agent-chip--warn {
+  color: var(--muted);
+  border-color: var(--rule);
+}
+
+.agent-chip--warn:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+.agent-chip--loading {
+  color: var(--muted);
+  border-color: var(--rule);
+}
+
+.agent-chip-icon {
+  font-size: 0.6875rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.agent-chip-label {
+  letter-spacing: 0.01em;
+}
+
+/* Panel */
+.agent-chip-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 200;
+  width: 22rem;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* The AgentNotice inside the panel needs no outer border — it already has one */
+.agent-chip-panel .agent-notice {
+  border: none;
+  border-radius: 6px;
+}
+
+.agent-chip-panel-ok {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+
+.agent-chip-panel-ok-text {
+  font-size: 0.875rem;
+  color: var(--fg);
+  margin: 0;
+}
+
+.agent-chip-recheck-btn {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+
+.agent-chip-recheck-btn:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+.agent-chip-recheck-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -1,0 +1,109 @@
+.sources {
+  padding: 2.5rem 1.25rem 2rem;
+  border-left: 1px solid var(--rule);
+  background: var(--surface);
+  height: 100%;
+  overflow-y: auto;
+}
+
+.sources-header {
+  margin: 0 0 1rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.sources-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.source-card {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface-2);
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+
+.source-card:hover {
+  border-color: var(--muted-2);
+}
+
+.source-num {
+  flex-shrink: 0;
+  min-width: 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted-2);
+  text-align: right;
+}
+
+.source-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.source-card[data-flash] {
+  border-color: var(--accent);
+  background: var(--accent-tint);
+  animation: source-flash 1.4s ease-out;
+}
+
+@keyframes source-flash {
+  0% { background: var(--accent-tint); }
+  100% { background: var(--surface-2); }
+}
+
+.source-name {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  line-height: 1.35;
+  color: var(--ink);
+  cursor: pointer;
+  /* Long URLs/repo names must wrap, never overflow the rail. */
+  overflow-wrap: anywhere;
+  transition: color 0.12s ease;
+}
+
+.source-name:hover {
+  color: var(--accent);
+}
+
+.source-meta {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  margin: 0.4rem 0 0;
+}
+
+.source-origin {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.source-score {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  color: var(--muted-2);
+}

@@ -1,0 +1,30 @@
+{
+  "total_count": 3,
+  "incomplete_results": false,
+  "items": [
+    {
+      "id": 81594887,
+      "full_name": "rust-lang/rust",
+      "html_url": "https://github.com/rust-lang/rust",
+      "description": "Empowering everyone to build reliable and efficient software.",
+      "stargazers_count": 102500,
+      "pushed_at": "2026-06-11T22:14:03Z"
+    },
+    {
+      "id": 74155672,
+      "full_name": "tokio-rs/tokio",
+      "html_url": "https://github.com/tokio-rs/tokio",
+      "description": "A runtime for writing reliable asynchronous applications with Rust.",
+      "stargazers_count": 28100,
+      "pushed_at": "2026-06-10T17:32:45Z"
+    },
+    {
+      "id": 125015,
+      "full_name": "BurntSushi/ripgrep",
+      "html_url": "https://github.com/BurntSushi/ripgrep",
+      "description": null,
+      "stargazers_count": 49300,
+      "pushed_at": "2026-06-09T11:05:22Z"
+    }
+  ]
+}

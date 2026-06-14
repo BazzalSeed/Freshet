@@ -1,0 +1,45 @@
+.reading {
+  display: flex;
+  flex-direction: column;
+  /* Exactly viewport-tall so the document column scrolls INSIDE the shell and
+     the Chrome bar stays pinned (the parent .app only sets min-height, which
+     isn't a definite height for the % chain to resolve against). */
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.reading-agent-error {
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.reading-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.reading-body[data-outline] {
+  grid-template-columns: 15rem 1fr;
+}
+
+.reading-body[data-sources] {
+  grid-template-columns: 1fr 20rem;
+}
+
+.reading-body[data-outline][data-sources] {
+  grid-template-columns: 15rem 1fr 20rem;
+}
+
+.reading-center {
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.reading-empty {
+  flex: 1;
+  background: var(--bg);
+}

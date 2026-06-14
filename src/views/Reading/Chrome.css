@@ -1,0 +1,96 @@
+.chrome {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1rem;
+  height: 3rem;
+  padding: 0 0.75rem;
+  /* At the top the bar merges into the page; it lifts off once scrolled. */
+  background: var(--bg);
+  border-bottom: 1px solid transparent;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chrome[data-scrolled] {
+  background: var(--surface);
+  border-bottom-color: var(--rule);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+}
+
+/* The contextual title is quiet at the top (the document's own <h1> is right
+   below it) and firms up as the bar lifts off — but the bar itself, with its
+   controls, is always visible. */
+.chrome-title {
+  color: var(--muted);
+  transition: color 0.2s ease;
+}
+
+.chrome[data-scrolled] .chrome-title {
+  color: var(--ink);
+}
+
+.chrome-left {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  justify-self: start;
+}
+
+.chrome-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-self: end;
+}
+
+.chrome-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chrome-title-word + .chrome-title-word {
+  margin-left: 0.3em;
+}
+
+.chrome-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chrome-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.chrome-btn[aria-pressed="true"] {
+  background: var(--accent-tint);
+  color: var(--accent);
+}
+
+.chrome-updated {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}

@@ -1,0 +1,199 @@
+/* ── Onboarding layout ──────────────────────────────────────────────────── */
+
+.ob-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--fg);
+  padding: 2rem;
+}
+
+.ob-card {
+  width: 100%;
+  max-width: 28rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* ── Step header ─────────────────────────────────────────────────────────── */
+
+.ob-wordmark {
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  margin: 0;
+}
+
+.ob-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.ob-headline {
+  font-family: var(--serif);
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--ink);
+  margin: 0;
+}
+
+.ob-description {
+  font-size: 0.9375rem;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Actions ─────────────────────────────────────────────────────────────── */
+
+.ob-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ob-btn-primary {
+  padding: 0.625rem 1.25rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-family: var(--serif);
+  font-size: 0.9375rem;
+  cursor: pointer;
+  text-align: center;
+  transition: opacity 0.12s;
+}
+
+.ob-btn-primary:hover {
+  opacity: 0.88;
+}
+
+.ob-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ob-btn-secondary {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font-family: var(--serif);
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.ob-btn-secondary:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+/* ── Folder step ─────────────────────────────────────────────────────────── */
+
+.ob-folder-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.ob-folder-input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  outline: none;
+  transition: border-color 0.12s;
+}
+
+.ob-folder-input:focus {
+  border-color: var(--muted);
+}
+
+.ob-folder-input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.ob-folder-browse {
+  padding: 0.5rem 0.875rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.ob-folder-browse:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+/* ── Agent step ──────────────────────────────────────────────────────────── */
+
+.ob-agent-found {
+  font-size: 0.9375rem;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.ob-agent-found strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.ob-agent-version {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.ob-agent-notfound {
+  font-size: 0.9375rem;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.ob-install-links {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.ob-install-link {
+  font-size: 0.875rem;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.12s;
+}
+
+.ob-install-link:hover {
+  border-color: var(--accent);
+}
+
+/* ── Loading placeholder ─────────────────────────────────────────────────── */
+
+.ob-loading {
+  min-height: 100vh;
+  background: var(--bg);
+}
