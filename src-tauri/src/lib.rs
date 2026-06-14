@@ -1,15 +1,20 @@
 pub mod agent;
+pub mod bridge;
+pub mod commands;
 pub mod engine;
 pub mod model;
 pub mod scheduler;
 pub mod store;
 pub mod sources;
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+use std::sync::{Arc, Mutex};
+
+use tauri::Manager;
+
+use crate::agent::discovery::{CmdRunner, RealCmdRunner};
+use crate::bridge::BackendState;
+use crate::commands::load_app_config;
+use crate::sources::{HttpClient, ReqwestClient};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -24,7 +29,52 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .setup(|app| {
+            // Resolve the app-config dir (outside any stream root) and load the
+            // app config from disk.
+            // UNVERIFIED: live path
+            let config_dir = app
+                .path()
+                .app_config_dir()
+                .expect("failed to resolve app config dir");
+            let config = load_app_config(&config_dir);
+
+            // The real runner + HTTP client live in managed state.
+            // UNVERIFIED: live path
+            let runner: Arc<dyn CmdRunner> = Arc::new(RealCmdRunner);
+            let http: Arc<dyn HttpClient> =
+                Arc::new(ReqwestClient::new().expect("failed to build HTTP client"));
+
+            app.manage(BackendState {
+                config_dir,
+                config: Mutex::new(config),
+                runner,
+                http,
+            });
+
+            // Kick off deferred detection, startup refresh, and the scheduler
+            // tick — all off the UI thread.
+            // UNVERIFIED: live path
+            bridge::spawn_background_tasks(app.handle().clone());
+
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            bridge::get_config,
+            bridge::get_onboarding_state,
+            bridge::list_agents,
+            bridge::recheck_agents,
+            bridge::set_root_folder,
+            bridge::set_default_agent,
+            bridge::complete_onboarding,
+            bridge::list_streams,
+            bridge::get_stream,
+            bridge::save_notes,
+            bridge::set_stream_status,
+            bridge::generate_first_draft,
+            bridge::create_stream,
+            bridge::refresh_stream,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
