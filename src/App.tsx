@@ -1,50 +1,72 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { BridgeProvider } from "./bridge/BridgeProvider";
+import { Desk } from "./views/Desk/Desk";
+import { Reading } from "./views/Reading/Reading";
+import { Create } from "./views/Create/Create";
+import { useTheme } from "./theme/useTheme";
+import type { StreamSummary } from "./bridge/types";
+import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+type View =
+  | { kind: "desk" }
+  | { kind: "reading"; id: string }
+  | { kind: "create" };
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
-
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    <button
+      className="app-theme-toggle"
+      aria-label="Toggle theme"
+      onClick={toggle}
+      type="button"
+      title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+    >
+      {theme === "dark" ? "☀" : "☾"}
+    </button>
   );
 }
 
-export default App;
+function AppShell() {
+  const [view, setView] = useState<View>({ kind: "desk" });
+
+  function handleOpen(id: string) {
+    setView({ kind: "reading", id });
+  }
+
+  function handleNew() {
+    setView({ kind: "create" });
+  }
+
+  function handleCreated(_summary: StreamSummary) {
+    setView({ kind: "desk" });
+  }
+
+  function handleBack() {
+    setView({ kind: "desk" });
+  }
+
+  return (
+    <div className="app">
+      <ThemeToggle />
+
+      {view.kind === "desk" && (
+        <Desk onOpen={handleOpen} onNew={handleNew} />
+      )}
+      {view.kind === "reading" && (
+        <Reading streamId={view.id} onBack={handleBack} />
+      )}
+      {view.kind === "create" && (
+        <Create onCreated={handleCreated} onCancel={handleBack} />
+      )}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BridgeProvider>
+      <AppShell />
+    </BridgeProvider>
+  );
+}
