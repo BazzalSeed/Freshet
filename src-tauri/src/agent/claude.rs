@@ -22,12 +22,11 @@ impl ClaudeAgent {
 /// Build the argv (after the program) for a synthesize invocation.
 /// Kept pure so the flag set is unit-testable without spawning anything.
 pub fn build_synthesize_args(prompt: &str) -> Vec<String> {
+    // Synthesis is tool-less text generation; no --permission-mode needed.
     vec![
         "-p".to_string(),
         prompt.to_string(),
         "--bare".to_string(),
-        "--permission-mode".to_string(),
-        "dontAsk".to_string(),
     ]
 }
 
@@ -250,8 +249,18 @@ mod tests {
         assert!(args.contains(&"-p".to_string()), "missing -p: {args:?}");
         assert!(args.contains(&"PROMPT".to_string()));
         assert!(args.contains(&"--bare".to_string()), "missing --bare: {args:?}");
-        assert!(args.contains(&"--permission-mode".to_string()));
-        assert!(args.contains(&"dontAsk".to_string()));
+        // Synthesis is tool-less; --permission-mode must NOT appear (it was
+        // previously passed without its required value, which claude rejects).
+        assert!(
+            !args.contains(&"--permission-mode".to_string()),
+            "--permission-mode must not appear in synthesize argv: {args:?}"
+        );
+        // Verify no dangling value-expecting flag at the end of the argv.
+        let last = args.last().map(String::as_str).unwrap_or("");
+        assert!(
+            !last.starts_with("--") || last == "--bare",
+            "argv must not end on a value-expecting flag: {args:?}"
+        );
         // -p must immediately precede the prompt.
         let p_idx = args.iter().position(|a| a == "-p").unwrap();
         assert_eq!(args[p_idx + 1], "PROMPT");
@@ -263,7 +272,10 @@ mod tests {
         assert!(args.contains(&"-p".to_string()));
         assert!(args.contains(&"--bare".to_string()));
         assert!(args.contains(&"HELLO".to_string()));
-        // chat does NOT force a permission mode.
-        assert!(!args.contains(&"--permission-mode".to_string()));
+        // Neither synthesize nor chat should carry --permission-mode.
+        assert!(
+            !args.contains(&"--permission-mode".to_string()),
+            "--permission-mode must not appear in chat argv: {args:?}"
+        );
     }
 }
