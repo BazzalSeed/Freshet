@@ -1,0 +1,13 @@
+:root {
+  --bg:#f4ecdd; --surface:#ebe1cf; --surface-2:#f7f0e3;
+  --ink:#2b2620; --fg:#352d25; --muted:#8a7a63; --muted-2:#a8967b;
+  --rule:#e0d6c4; --accent:#9c5b33; --accent-tint:rgba(156,91,51,.11);
+  --serif:'Newsreader Variable',Georgia,serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+  color-scheme:light;
+}
+[data-theme="dark"] {
+  --bg:#0d1117; --surface:#161b22; --surface-2:#161b22;
+  --ink:#e6edf3; --fg:#c9d1d9; --muted:#8b949e; --muted-2:#8b949e;
+  --rule:#21262d; --accent:#3fb950; --accent-tint:rgba(63,185,80,.13);
+  color-scheme:dark;
+}
