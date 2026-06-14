@@ -152,12 +152,12 @@ pub(crate) fn build_reconcile_prompt(input: &ResearchInput) -> String {
         p.push_str("There is no prior document; this is the first synthesis.\n\n");
     }
 
-    p.push_str("NEW ITEMS (cite by [^id] using the bracketed id):\n");
+    p.push_str("NEW ITEMS — cite a claim by appending its bracketed id (e.g. [^c1]):\n");
     if input.items.is_empty() {
         p.push_str("(none)\n");
     } else {
-        for item in input.items {
-            p.push_str(&claude::render_item_line(item));
+        for (i, item) in input.items.iter().enumerate() {
+            p.push_str(&claude::render_item_line(&citation_id(i), item));
             p.push('\n');
         }
     }
@@ -170,11 +170,77 @@ pub(crate) fn build_reconcile_prompt(input: &ResearchInput) -> String {
          - Preserve prior understanding; integrate, do not restate wholesale.\n\
          - Significance over recency: omit items that don't change the picture.\n\
          - If nothing materially changed, say so plainly under \"What changed\".\n\
-         - Cite claims with [^id] footnotes and provide matching \
-         `[^id]: <source> — <url>` definitions at the end.\n\
+         - Cite claims inline using the EXACT bracketed ids above, copied verbatim \
+         (e.g. [^c1], [^c2]). Do not renumber them and do not invent new ids.\n\
+         - NEVER write a URL or a link in the prose, and do NOT write any footnote \
+         definition lines (`[^c1]: …`) — Freshet builds the source list itself from \
+         the items above.\n\
+         - Do NOT reuse citation ids from the prior document; cite only the items above.\n\
          - Output GitHub-flavored markdown only. No preamble, no sign-off.\n",
     );
     p
+}
+
+/// The canonical citation id for the item at 0-based index `i`: `c1`, `c2`, …
+/// The prompt offers these ids to the agent; [`finalize_synthesis`] appends the
+/// matching definitions for whichever ones the agent actually cited.
+pub(crate) fn citation_id(i: usize) -> String {
+    format!("c{}", i + 1)
+}
+
+/// One canonical footnote-definition line, in the ` · `-separated shape the
+/// frontend parser expects: `[^id]: source · title · score · url`.
+pub(crate) fn citation_def_line(cite_id: &str, item: &SourceItem) -> String {
+    let score = item
+        .score
+        .map(|s| format!(" · {}", s as i64))
+        .unwrap_or_default();
+    format!(
+        "[^{}]: {} · {}{} · {}",
+        cite_id, item.source, item.title, score, item.url
+    )
+}
+
+/// Build the document's footnote definitions from our local source items.
+///
+/// We own the citation metadata: the agent only places `[^cN]` markers (see
+/// [`build_reconcile_prompt`]). This drops any definition lines the agent wrote
+/// anyway, then appends a clean `[^cN]: source · title · score · url` line —
+/// built from the locally-fetched items — for each id the agent cited. So the
+/// rendered citations and the Sources panel always parse, deterministically,
+/// straight from our data.
+pub(crate) fn finalize_synthesis(agent_md: &str, items: &[SourceItem]) -> String {
+    // Strip any footnote-definition lines the agent emitted — Freshet owns these.
+    let body = agent_md
+        .lines()
+        .filter(|l| !is_footnote_def(l))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let body = body.trim_end();
+
+    let mut defs = String::new();
+    for (i, item) in items.iter().enumerate() {
+        let id = citation_id(i);
+        if body.contains(&format!("[^{id}]")) {
+            defs.push_str(&citation_def_line(&id, item));
+            defs.push('\n');
+        }
+    }
+
+    if defs.is_empty() {
+        body.to_string()
+    } else {
+        format!("{}\n\n{}", body, defs.trim_end())
+    }
+}
+
+/// True for a footnote-definition line `[^id]: …` (leading whitespace allowed).
+fn is_footnote_def(line: &str) -> bool {
+    let t = line.trim_start();
+    t.strip_prefix("[^")
+        .and_then(|rest| rest.find("]:"))
+        .map(|close| close > 0)
+        .unwrap_or(false)
 }
 
 /// Flatten a system prompt + chat history into a single `-p` prompt string.
@@ -359,11 +425,74 @@ mod tests {
         };
         let prompt = build_reconcile_prompt(&input);
         assert!(prompt.contains("Rust async"));
-        assert!(prompt.contains("hn:42"));
+        assert!(prompt.contains("Big release"), "item title must appear");
+        assert!(prompt.contains("[^c1]"), "first item must be offered as [^c1]");
         assert!(prompt.contains("## What changed"));
         assert!(prompt.contains("## Current understanding"));
         assert!(prompt.contains("## Open questions"));
-        assert!(prompt.contains("[^id]"));
+        // The raw URL must NOT be shown to the agent (it can't paste what it can't see).
+        assert!(
+            !prompt.contains("https://example.com/x"),
+            "the item URL must not appear in the prompt"
+        );
         assert!(prompt.contains("Async is hard."), "prior doc must be embedded");
+    }
+
+    fn cited_item(id: &str, source: &str, title: &str, url: &str, score: Option<f64>) -> SourceItem {
+        SourceItem {
+            id: id.into(),
+            source: source.into(),
+            url: url.into(),
+            title: title.into(),
+            score,
+            snippet: "snippet".into(),
+            created_at: None,
+        }
+    }
+
+    /// finalize_synthesis appends a canonical ` · `-separated definition — built
+    /// from our local items — for each cited id, and drops any definition lines
+    /// the agent wrote itself (we own them).
+    #[test]
+    fn finalize_owns_defs_from_local_items() {
+        let items = vec![
+            cited_item("github:jestjs/jest", "github", "jestjs/jest", "https://github.com/jestjs/jest", Some(1200.0)),
+            cited_item("hn:9", "hackernews", "Bun ships", "https://news.example/9", Some(88.0)),
+        ];
+        // Agent cited c1 only, and (against instructions) wrote its own messy def.
+        let agent_md = "## What changed\n- Jest is canonical [^c1].\n\n\
+                        [^c1]: jestjs/jest — https://github.com/jestjs/jest";
+        let out = finalize_synthesis(agent_md, &items);
+
+        // Our canonical def, built from local data — not the agent's text.
+        assert!(
+            out.contains("[^c1]: github · jestjs/jest · 1200 · https://github.com/jestjs/jest"),
+            "missing canonical c1 def: {out}"
+        );
+        // The agent's own "name — url" def was stripped (appears exactly once now).
+        assert_eq!(
+            out.matches("[^c1]:").count(),
+            1,
+            "agent's def line must be stripped, not duplicated: {out}"
+        );
+        // Uncited item gets no def; prose preserved.
+        assert!(!out.contains("[^c2]:"), "uncited item must not get a def: {out}");
+        assert!(out.contains("Jest is canonical [^c1]."));
+    }
+
+    /// With nothing cited, the body is returned untouched (no stray defs).
+    #[test]
+    fn finalize_no_citations_unchanged() {
+        let items = vec![cited_item("hn:1", "hackernews", "A", "https://x", Some(1.0))];
+        let out = finalize_synthesis("## What changed\n- Nothing new.\n", &items);
+        assert_eq!(out, "## What changed\n- Nothing new.");
+    }
+
+    /// citation_def_line omits the score when absent (no trailing empty field).
+    #[test]
+    fn citation_def_line_without_score() {
+        let item = cited_item("r:1", "reddit", "A thread", "https://r/1", None);
+        let line = citation_def_line("c1", &item);
+        assert_eq!(line, "[^c1]: reddit · A thread · https://r/1");
     }
 }

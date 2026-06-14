@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::model::{AgentKind, StreamDescription};
 
 use super::discovery::CmdRunner;
-use super::{build_reconcile_prompt, extract_proposed_description, render_chat_prompt, Agent, ChatReply, ChatTurn, ResearchInput};
+use super::{build_reconcile_prompt, extract_proposed_description, finalize_synthesis, render_chat_prompt, Agent, ChatReply, ChatTurn, ResearchInput};
 
 pub struct CodexAgent {
     pub path: PathBuf,
@@ -81,7 +81,8 @@ impl Agent for CodexAgent {
             );
             anyhow::bail!("codex synthesize failed: {detail}");
         }
-        Ok(out.stdout)
+        // Append canonical footnote definitions for the items the agent cited.
+        Ok(finalize_synthesis(&out.stdout, input.items))
     }
 
     fn chat(&self, system: &str, history: &[ChatTurn]) -> anyhow::Result<ChatReply> {

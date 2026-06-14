@@ -117,10 +117,15 @@ pub fn refresh(
         synthesized.len(),
     );
 
+    // Prepend the Freshet-owned title header so the document is a complete,
+    // standalone markdown artifact (the agent emits only the three movements).
+    let date = now.get(..10).unwrap_or(now);
+    let with_header = format!("# {}\n_updated {}_\n\n{}", desc.title, date, synthesized.trim_start());
+
     // Re-attach the user-owned My-notes block byte-for-byte.
     let final_doc = match &my_notes_block {
-        Some(block) => splice_my_notes(&synthesized, block),
-        None => synthesized,
+        Some(block) => splice_my_notes(&with_header, block),
+        None => with_header,
     };
 
     // History: snapshot the prior document BEFORE overwriting it.

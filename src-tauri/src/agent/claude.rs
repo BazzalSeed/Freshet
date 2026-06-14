@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::model::{AgentKind, SourceItem, StreamDescription};
 
 use super::discovery::CmdRunner;
-use super::{build_reconcile_prompt, extract_proposed_description, render_chat_prompt, Agent, ChatReply, ChatTurn, ResearchInput};
+use super::{build_reconcile_prompt, extract_proposed_description, finalize_synthesis, render_chat_prompt, Agent, ChatReply, ChatTurn, ResearchInput};
 
 pub struct ClaudeAgent {
     pub path: PathBuf,
@@ -77,7 +77,8 @@ impl Agent for ClaudeAgent {
             );
             anyhow::bail!("claude synthesize failed: {detail}");
         }
-        Ok(out.stdout)
+        // Append canonical footnote definitions for the items the agent cited.
+        Ok(finalize_synthesis(&out.stdout, input.items))
     }
 
     fn chat(&self, system: &str, history: &[ChatTurn]) -> anyhow::Result<ChatReply> {
@@ -132,14 +133,19 @@ fn non_empty_detail<'a>(stdout: &'a str, stderr: &'a str) -> &'a str {
 }
 
 /// Render a SourceItem as a prompt list line. Shared shape used by both adapters.
-pub(super) fn render_item_line(item: &SourceItem) -> String {
+///
+/// `cite_id` is the canonical citation id (e.g. "c1") the agent must use to cite
+/// this item inline as `[^c1]`. The raw URL is deliberately NOT shown — the agent
+/// never needs it (Freshet appends the footnote definitions itself), and omitting
+/// it removes the temptation to paste "name — url" into the prose.
+pub(super) fn render_item_line(cite_id: &str, item: &SourceItem) -> String {
     let score = item
         .score
-        .map(|s| format!(" (score {s})"))
+        .map(|s| format!(", score {}", s as i64))
         .unwrap_or_default();
     format!(
-        "- [{}] {} — {}{}\n  {}",
-        item.id, item.title, item.url, score, item.snippet
+        "- [^{}] {} ({}{})\n  {}",
+        cite_id, item.title, item.source, score, item.snippet
     )
 }
 

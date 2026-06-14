@@ -107,6 +107,7 @@ pub fn run() {
             bridge::complete_onboarding,
             bridge::list_streams,
             bridge::get_stream,
+            bridge::open_url,
             bridge::save_notes,
             bridge::set_stream_status,
             bridge::generate_first_draft,

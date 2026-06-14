@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 use crate::agent::discovery::CmdRunner;
 use crate::agent::{detect_agents, select_agent, Agent};
@@ -163,6 +163,36 @@ pub fn complete_onboarding(state: State<'_, BackendState>) -> Result<(), String>
     estr(commands::complete_onboarding(&state.config_dir))?;
     *state.config.lock().expect("config mutex poisoned") =
         commands::load_app_config(&state.config_dir);
+    Ok(())
+}
+
+/// Open a reference URL in-app, in a single reusable "reference" webview window.
+///
+/// A citation or source is a web page; rather than punt to the system browser we
+/// keep the user inside Freshet — the first open creates the window, subsequent
+/// opens navigate and re-focus it. Only `http`/`https` are accepted. The remote
+/// page gets no IPC access (it isn't granted any capabilities).
+// UNVERIFIED: live path — creates a real webview window.
+#[tauri::command]
+pub fn open_url(app: AppHandle, url: String) -> Result<(), String> {
+    let parsed = tauri::Url::parse(&url).map_err(|e| format!("invalid url: {e}"))?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        other => return Err(format!("refusing to open non-web url scheme: {other}")),
+    }
+
+    const LABEL: &str = "reference";
+    if let Some(w) = app.get_webview_window(LABEL) {
+        w.navigate(parsed).map_err(|e| format!("{e:#}"))?;
+        let _ = w.set_focus();
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(&app, LABEL, WebviewUrl::External(parsed))
+        .title("Reference")
+        .inner_size(1024.0, 800.0)
+        .build()
+        .map_err(|e| format!("{e:#}"))?;
     Ok(())
 }
 
