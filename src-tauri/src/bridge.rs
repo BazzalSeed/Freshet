@@ -80,8 +80,26 @@ fn detect_live(runner: &dyn CmdRunner) -> Vec<AgentStatus> {
 }
 
 /// Select and construct a live agent for `desc`'s configured preference.
+///
+/// When `FRESHET_FAKE_AGENT=1` (or `true`) is set, returns a `FakeAgent` that
+/// synthesizes a deterministic living document from the given items without
+/// calling any real LLM. This lets the full app run end-to-end with no Claude
+/// auth required.
 // UNVERIFIED: live path
 fn resolve_agent(state: &BackendState) -> anyhow::Result<Box<dyn Agent>> {
+    let fake_flag = std::env::var("FRESHET_FAKE_AGENT")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if fake_flag {
+        log::warn!(
+            "FRESHET_FAKE_AGENT active — using deterministic fake agent (no real LLM)"
+        );
+        use crate::agent::fake::FakeAgent;
+        use crate::model::AgentKind;
+        return Ok(Box::new(FakeAgent::reflecting(AgentKind::ClaudeCode)));
+    }
+
     let statuses = detect_live(state.runner.as_ref());
     select_agent(state.selected_agent(), &statuses, Arc::clone(&state.runner))
         .ok_or_else(|| anyhow::anyhow!("no usable agent found; check agent installation"))

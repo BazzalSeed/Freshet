@@ -83,6 +83,12 @@ fn detect_one(
     match find_binary(name, runner, candidates, exists) {
         Some(path) => {
             let version = probe_version(&path, runner);
+            log::info!(
+                "agent detected: kind={:?} path={:?} version={:?}",
+                kind,
+                path,
+                version,
+            );
             AgentStatus {
                 kind,
                 available: true,
@@ -90,12 +96,15 @@ fn detect_one(
                 path: Some(path.to_string_lossy().into_owned()),
             }
         }
-        None => AgentStatus {
-            kind,
-            available: false,
-            version: None,
-            path: None,
-        },
+        None => {
+            log::info!("agent not found: kind={:?} name={}", kind, name);
+            AgentStatus {
+                kind,
+                available: false,
+                version: None,
+                path: None,
+            }
+        }
     }
 }
 

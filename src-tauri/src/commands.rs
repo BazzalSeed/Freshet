@@ -219,8 +219,19 @@ pub fn refresh_stream(
     providers: &[Box<dyn SourceProvider>],
     now: &str,
 ) -> anyhow::Result<Summary> {
+    log::info!("commands::refresh_stream: id={:?}", id);
     let desc = store::load_description(root, id)?;
-    engine::refresh(root, &desc, agent, providers, now)
+    let result = engine::refresh(root, &desc, agent, providers, now);
+    match &result {
+        Ok(summary) => log::info!(
+            "commands::refresh_stream: id={:?} done — changed={} n_new={}",
+            id,
+            summary.changed,
+            summary.n_new,
+        ),
+        Err(e) => log::error!("commands::refresh_stream: id={:?} failed: {e:#}", id),
+    }
+    result
 }
 
 /// The input to `generate_first_draft` (mirrors the frontend `DraftInput`).
@@ -292,11 +303,17 @@ pub fn generate_first_draft(
     providers: &[Box<dyn SourceProvider>],
     now: &str,
 ) -> anyhow::Result<DraftResult> {
+    log::info!(
+        "commands::generate_first_draft: topic={:?} sources={:?}",
+        input.topic,
+        input.sources,
+    );
     let proposed = description_from_input(input, now);
 
     let items = crate::sources::fetch_all(providers, &proposed.topic, 30);
 
     if items.is_empty() {
+        log::warn!("commands::generate_first_draft: 0 items from all sources — aborting");
         anyhow::bail!(
             "No results from the selected sources. \
              Try another source — some (e.g. Reddit) may be blocked or need setup."
@@ -307,10 +324,19 @@ pub fn generate_first_draft(
         topic: &proposed.topic,
         items: &items,
         prior_doc: None,
-    })?;
+    });
+
+    match &draft {
+        Ok(d) => log::info!(
+            "commands::generate_first_draft: done — draft_len={} proposed_id={:?}",
+            d.len(),
+            proposed.id,
+        ),
+        Err(e) => log::error!("commands::generate_first_draft: synthesis failed: {e:#}"),
+    }
 
     Ok(DraftResult {
-        draft_markdown: draft,
+        draft_markdown: draft?,
         proposed_description: proposed,
     })
 }
@@ -327,10 +353,17 @@ pub fn create_stream(
     providers: &[Box<dyn SourceProvider>],
     now: &str,
 ) -> anyhow::Result<StreamSummary> {
+    log::info!(
+        "commands::create_stream: id={:?} topic={:?} sources={:?}",
+        desc.id,
+        desc.topic,
+        desc.sources,
+    );
     // Pre-flight: fetch to see if sources have anything.  This also primes
     // the UI with a useful error rather than hanging on the agent call.
     let preview_items = crate::sources::fetch_all(providers, &desc.topic, 1);
     if preview_items.is_empty() {
+        log::warn!("commands::create_stream: 0 items from all sources — aborting");
         anyhow::bail!(
             "No results from the selected sources. \
              Try another source — some (e.g. Reddit) may be blocked or need setup."
@@ -338,7 +371,17 @@ pub fn create_stream(
     }
 
     store::save_description(root, desc)?;
-    engine::refresh(root, desc, agent, providers, now)?;
+    let result = engine::refresh(root, desc, agent, providers, now);
+    match &result {
+        Ok(summary) => log::info!(
+            "commands::create_stream: id={:?} done — changed={} n_new={}",
+            desc.id,
+            summary.changed,
+            summary.n_new,
+        ),
+        Err(e) => log::error!("commands::create_stream: id={:?} failed: {e:#}", desc.id),
+    }
+    result?;
 
     let state = store::load_state(root, &desc.id);
     Ok(StreamSummary {

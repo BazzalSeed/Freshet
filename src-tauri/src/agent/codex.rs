@@ -59,12 +59,24 @@ impl Agent for CodexAgent {
             .path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("codex path is not valid UTF-8"))?;
+        // Log the argv so failed invocations are traceable.
+        log::info!(
+            "codex synthesize: invoking {} with flags {:?}",
+            path,
+            &arg_refs[..arg_refs.len().min(4)],
+        );
         // UNVERIFIED: live path
         let out = self.runner.run(path, &arg_refs)?;
         if !out.success {
             // Include both stderr and stdout so auth errors (often on stdout)
             // are surfaced to the UI rather than being swallowed.
             let detail = non_empty_detail(&out.stdout, &out.stderr);
+            log::error!(
+                "codex synthesize failed: {} | stderr={:?} | stdout={:?}",
+                detail,
+                out.stderr.trim(),
+                out.stdout.trim(),
+            );
             anyhow::bail!("codex synthesize failed: {detail}");
         }
         Ok(out.stdout)
@@ -78,10 +90,22 @@ impl Agent for CodexAgent {
             .path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("codex path is not valid UTF-8"))?;
+        log::info!(
+            "codex chat: invoking {} with flags {:?} (turns={})",
+            path,
+            &arg_refs[..arg_refs.len().min(2)],
+            history.len(),
+        );
         // UNVERIFIED: live path
         let out = self.runner.run(path, &arg_refs)?;
         if !out.success {
             let detail = non_empty_detail(&out.stdout, &out.stderr);
+            log::error!(
+                "codex chat failed: {} | stderr={:?} | stdout={:?}",
+                detail,
+                out.stderr.trim(),
+                out.stdout.trim(),
+            );
             anyhow::bail!("codex chat failed: {detail}");
         }
         let proposed = extract_proposed(&out.stdout);

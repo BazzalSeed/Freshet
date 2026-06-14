@@ -64,6 +64,7 @@ pub fn refresh(
         let sb = b.score.unwrap_or(f64::NEG_INFINITY);
         sb.partial_cmp(&sa).unwrap_or(std::cmp::Ordering::Equal)
     });
+    let fetched_total = items.len();
 
     // 3. Dedup against already-seen ids.
     let new: Vec<_> = items
@@ -71,8 +72,19 @@ pub fn refresh(
         .filter(|it| !state.seen_item_ids.contains(&it.id))
         .collect();
 
+    log::info!(
+        "engine::refresh stream={:?}: fetched={} total, new={}",
+        desc.id,
+        fetched_total,
+        new.len(),
+    );
+
     // 4. Nothing new → quiet. Touch last_checked_at, never call the agent.
     if new.is_empty() {
+        log::info!(
+            "engine::refresh stream={:?}: nothing new — quiet pass (no synthesis)",
+            desc.id,
+        );
         state.last_checked_at = Some(now.to_string());
         store::save_state(root, &desc.id, &state)?;
         return Ok(Summary { changed: false, n_new: 0 });
@@ -88,11 +100,22 @@ pub fn refresh(
         None => (None, None),
     };
 
+    log::info!(
+        "engine::refresh stream={:?}: synthesizing ({} new items, prior_doc={})",
+        desc.id,
+        new.len(),
+        freshet_owned.is_some(),
+    );
     let synthesized = agent.synthesize(ResearchInput {
         topic: &desc.topic,
         items: &new,
         prior_doc: freshet_owned.as_deref(),
     })?;
+    log::info!(
+        "engine::refresh stream={:?}: synthesis complete, doc_len={}",
+        desc.id,
+        synthesized.len(),
+    );
 
     // Re-attach the user-owned My-notes block byte-for-byte.
     let final_doc = match &my_notes_block {
@@ -106,6 +129,12 @@ pub fn refresh(
     }
 
     // Atomic write of the new living document.
+    let doc_path = store::doc_path(root, &desc.title);
+    log::info!(
+        "engine::refresh stream={:?}: writing document to {:?}",
+        desc.id,
+        doc_path,
+    );
     write_document(root, &desc.title, &final_doc)?;
 
     // Update state.

@@ -159,11 +159,19 @@ pub fn fetch_all(
     let mut items = Vec::new();
     for provider in providers {
         match provider.fetch(topic, limit) {
-            Ok(mut fetched) => items.append(&mut fetched),
+            Ok(mut fetched) => {
+                log::info!(
+                    "sources: channel='{}' topic={:?} fetched={} items",
+                    provider.channel(),
+                    topic,
+                    fetched.len(),
+                );
+                items.append(&mut fetched);
+            }
             Err(e) => {
-                // Graceful degrade: log the error but keep going.
-                eprintln!(
-                    "[sources] provider '{}' failed (skipping): {e:#}",
+                // Graceful degrade: warn and keep going so other providers still run.
+                log::warn!(
+                    "sources: provider '{}' failed (skipping): {e:#}",
                     provider.channel()
                 );
             }

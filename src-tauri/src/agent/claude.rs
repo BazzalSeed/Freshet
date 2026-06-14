@@ -55,6 +55,12 @@ impl Agent for ClaudeAgent {
             .path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("claude path is not valid UTF-8"))?;
+        // Log the argv so failed invocations (e.g. "Not logged in") are traceable.
+        log::info!(
+            "claude synthesize: invoking {} with flags {:?}",
+            path,
+            &arg_refs[..arg_refs.len().min(4)], // first flags only, not the full prompt
+        );
         // UNVERIFIED: live path
         let out = self.runner.run(path, &arg_refs)?;
         if !out.success {
@@ -62,6 +68,12 @@ impl Agent for ClaudeAgent {
             // "Not logged in · Please run /login" (which claude may emit on
             // stdout) are surfaced to the UI rather than being swallowed.
             let detail = non_empty_detail(&out.stdout, &out.stderr);
+            log::error!(
+                "claude synthesize failed: {} | stderr={:?} | stdout={:?}",
+                detail,
+                out.stderr.trim(),
+                out.stdout.trim(),
+            );
             anyhow::bail!("claude synthesize failed: {detail}");
         }
         Ok(out.stdout)
@@ -75,10 +87,22 @@ impl Agent for ClaudeAgent {
             .path
             .to_str()
             .ok_or_else(|| anyhow::anyhow!("claude path is not valid UTF-8"))?;
+        log::info!(
+            "claude chat: invoking {} with flags {:?} (turns={})",
+            path,
+            &arg_refs[..arg_refs.len().min(2)],
+            history.len(),
+        );
         // UNVERIFIED: live path
         let out = self.runner.run(path, &arg_refs)?;
         if !out.success {
             let detail = non_empty_detail(&out.stdout, &out.stderr);
+            log::error!(
+                "claude chat failed: {} | stderr={:?} | stdout={:?}",
+                detail,
+                out.stderr.trim(),
+                out.stdout.trim(),
+            );
             anyhow::bail!("claude chat failed: {detail}");
         }
         let proposed = extract_proposed(&out.stdout);
