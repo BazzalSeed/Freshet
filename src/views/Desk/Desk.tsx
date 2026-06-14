@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useBridge } from "../../bridge/BridgeProvider";
 import type { StreamSummary } from "../../bridge/types";
+import { AgentStatusChip } from "../../components/AgentStatusChip";
 import { StreamRow } from "./StreamRow";
 import "./Desk.css";
 
@@ -25,14 +26,17 @@ export function Desk({ onOpen, onNew }: DeskProps) {
     <div className="desk">
       <header className="desk-header">
         <h1 className="desk-title">Freshet</h1>
-        <button
-          className="desk-new"
-          aria-label="New stream"
-          onClick={onNew}
-          type="button"
-        >
-          New stream
-        </button>
+        <div className="desk-header-actions">
+          <AgentStatusChip />
+          <button
+            className="desk-new"
+            aria-label="New stream"
+            onClick={onNew}
+            type="button"
+          >
+            New stream
+          </button>
+        </div>
       </header>
 
       <section className="desk-streams" aria-label="Streams">

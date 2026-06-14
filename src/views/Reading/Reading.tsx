@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useBridge } from "../../bridge/BridgeProvider";
+import { asFreshetError } from "../../bridge/types";
+import type { FreshetError } from "../../bridge/types";
 import { parseDoc } from "../../lib/parseDoc";
+import { AgentNotice } from "../../components/AgentNotice";
 import { Chrome } from "./Chrome";
 import { Outline } from "./Outline";
 import { Sources } from "./Sources";
@@ -25,6 +28,7 @@ export function Reading({
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [showOutline, setShowOutline] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const [refreshError, setRefreshError] = useState<FreshetError | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -39,9 +43,20 @@ export function Reading({
   const doc = useMemo(() => (markdown ? parseDoc(markdown) : null), [markdown]);
 
   const handleRefresh = async () => {
-    await bridge.refreshStream(streamId);
-    const r = await bridge.getStream(streamId);
-    setMarkdown(r.documentMarkdown);
+    setRefreshError(null);
+    try {
+      await bridge.refreshStream(streamId);
+      const r = await bridge.getStream(streamId);
+      setMarkdown(r.documentMarkdown);
+    } catch (e) {
+      setRefreshError(asFreshetError(e));
+    }
+  };
+
+  const handleRecheckAndRefresh = async () => {
+    setRefreshError(null);
+    await bridge.recheckAgents();
+    await handleRefresh();
   };
 
   const handleSaveNotes = async (block: string) => {
@@ -66,6 +81,16 @@ export function Reading({
         onBack={onBack}
         onRefresh={handleRefresh}
       />
+
+      {refreshError && (
+        <div className="reading-agent-error">
+          <AgentNotice
+            error={refreshError}
+            onRecheck={handleRecheckAndRefresh}
+            onRetry={handleRefresh}
+          />
+        </div>
+      )}
 
       {doc ? (
         <div

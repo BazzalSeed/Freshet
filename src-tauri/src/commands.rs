@@ -17,6 +17,105 @@ use std::path::Path;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
+// ── Typed agent error (serialized over the Tauri bridge) ────────────────────
+
+/// A structured, serializable error that agent-using commands return as their
+/// `Err` variant. Tauri serializes this as the `Err` side so the JS `catch`
+/// receives a plain object with `code`, `message`, and optionally `hint`.
+///
+/// Codes:
+/// - `not_logged_in` — agent stdout/stderr contains "Not logged in" / "/login"
+/// - `no_agent`      — no agent was detected or selected
+/// - `timeout`       — the agent invocation timed out
+/// - `no_sources`    — all source providers returned 0 items
+/// - `agent_failed`  — any other agent error (includes underlying message)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FreshetError {
+    pub code: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+}
+
+impl FreshetError {
+    pub fn not_logged_in() -> Self {
+        Self {
+            code: "not_logged_in".into(),
+            message: "The agent is not logged in.".into(),
+            hint: Some(
+                "Open your terminal, run `claude` then `/login`, then re-check.".into(),
+            ),
+        }
+    }
+
+    pub fn no_agent() -> Self {
+        Self {
+            code: "no_agent".into(),
+            message: "No agent detected or selected.".into(),
+            hint: Some("Install Claude Code or Codex, then re-check.".into()),
+        }
+    }
+
+    pub fn timeout() -> Self {
+        Self {
+            code: "timeout".into(),
+            message: "The agent timed out.".into(),
+            hint: None,
+        }
+    }
+
+    pub fn no_sources() -> Self {
+        Self {
+            code: "no_sources".into(),
+            message: "No results from the selected sources. Try another source — some (e.g. Reddit) may be blocked or need setup.".into(),
+            hint: None,
+        }
+    }
+
+    pub fn agent_failed(underlying: &str) -> Self {
+        Self {
+            code: "agent_failed".into(),
+            message: format!("The agent returned an error: {underlying}"),
+            hint: None,
+        }
+    }
+}
+
+impl std::fmt::Display for FreshetError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for FreshetError {}
+
+/// Classify an `anyhow::Error` from an agent call into a [`FreshetError`].
+///
+/// Checks the error message chain for "Not logged in" / "/login" strings
+/// (which claude may emit on stdout or stderr), then falls through to the
+/// generic `agent_failed` code.
+pub fn classify_agent_error(err: &anyhow::Error) -> FreshetError {
+    let msg = format!("{err:#}");
+    if is_not_logged_in(&msg) {
+        FreshetError::not_logged_in()
+    } else if is_timeout(&msg) {
+        FreshetError::timeout()
+    } else {
+        FreshetError::agent_failed(&msg)
+    }
+}
+
+/// True when the message contains an auth-failure signal.
+fn is_not_logged_in(msg: &str) -> bool {
+    msg.contains("Not logged in") || msg.contains("/login")
+}
+
+/// True when the message contains a timeout signal.
+fn is_timeout(msg: &str) -> bool {
+    msg.contains("timed out") || msg.contains("timeout")
+}
+
 use crate::agent::{Agent, ResearchInput};
 use crate::engine;
 use crate::model::{
@@ -295,14 +394,14 @@ pub fn description_from_input(input: &DraftInput, now: &str) -> StreamDescriptio
 /// the draft markdown and the proposed description so the frontend can present
 /// them before the user commits.
 ///
-/// Returns `Err` when all sources returned 0 items — calling the agent with
-/// nothing to say is pointless and would hang the UI on a slow/failing agent.
+/// Returns `Err(FreshetError)` when all sources returned 0 items (`no_sources`)
+/// or the agent fails (`not_logged_in` / `agent_failed` / `timeout`).
 pub fn generate_first_draft(
     input: &DraftInput,
     agent: &dyn Agent,
     providers: &[Box<dyn SourceProvider>],
     now: &str,
-) -> anyhow::Result<DraftResult> {
+) -> Result<DraftResult, FreshetError> {
     log::info!(
         "commands::generate_first_draft: topic={:?} sources={:?}",
         input.topic,
@@ -314,10 +413,7 @@ pub fn generate_first_draft(
 
     if items.is_empty() {
         log::warn!("commands::generate_first_draft: 0 items from all sources — aborting");
-        anyhow::bail!(
-            "No results from the selected sources. \
-             Try another source — some (e.g. Reddit) may be blocked or need setup."
-        );
+        return Err(FreshetError::no_sources());
     }
 
     let draft = agent.synthesize(ResearchInput {
@@ -335,8 +431,9 @@ pub fn generate_first_draft(
         Err(e) => log::error!("commands::generate_first_draft: synthesis failed: {e:#}"),
     }
 
+    let markdown = draft.map_err(|e| classify_agent_error(&e))?;
     Ok(DraftResult {
-        draft_markdown: draft?,
+        draft_markdown: markdown,
         proposed_description: proposed,
     })
 }
@@ -346,13 +443,14 @@ pub fn generate_first_draft(
 ///
 /// Fails if all sources return 0 items — we will not create an empty stream
 /// whose first doc would be a hallucination with no evidence.
+/// Returns `Err(FreshetError)` with `no_sources` or classified agent error.
 pub fn create_stream(
     root: &Path,
     desc: &StreamDescription,
     agent: &dyn Agent,
     providers: &[Box<dyn SourceProvider>],
     now: &str,
-) -> anyhow::Result<StreamSummary> {
+) -> Result<StreamSummary, FreshetError> {
     log::info!(
         "commands::create_stream: id={:?} topic={:?} sources={:?}",
         desc.id,
@@ -364,13 +462,11 @@ pub fn create_stream(
     let preview_items = crate::sources::fetch_all(providers, &desc.topic, 1);
     if preview_items.is_empty() {
         log::warn!("commands::create_stream: 0 items from all sources — aborting");
-        anyhow::bail!(
-            "No results from the selected sources. \
-             Try another source — some (e.g. Reddit) may be blocked or need setup."
-        );
+        return Err(FreshetError::no_sources());
     }
 
-    store::save_description(root, desc)?;
+    store::save_description(root, desc)
+        .map_err(|e| FreshetError::agent_failed(&format!("{e:#}")))?;
     let result = engine::refresh(root, desc, agent, providers, now);
     match &result {
         Ok(summary) => log::info!(
@@ -381,7 +477,7 @@ pub fn create_stream(
         ),
         Err(e) => log::error!("commands::create_stream: id={:?} failed: {e:#}", desc.id),
     }
-    result?;
+    result.map_err(|e| classify_agent_error(&e))?;
 
     let state = store::load_state(root, &desc.id);
     Ok(StreamSummary {
@@ -390,6 +486,34 @@ pub fn create_stream(
         last_checked_at: state.last_checked_at.clone(),
         changed_since_seen: changed_since_seen(&state),
     })
+}
+
+/// Refresh a single stream: one watch pass via [`engine::refresh`].
+///
+/// The agent and providers are injected so this is testable; the live wrapper
+/// resolves them from managed state. Returns the [`Summary`].
+/// Returns `Err(FreshetError)` with classified agent error on failure.
+pub fn refresh_stream_typed(
+    root: &Path,
+    id: &str,
+    agent: &dyn Agent,
+    providers: &[Box<dyn SourceProvider>],
+    now: &str,
+) -> Result<Summary, FreshetError> {
+    log::info!("commands::refresh_stream_typed: id={:?}", id);
+    let desc = store::load_description(root, id)
+        .map_err(|e| FreshetError::agent_failed(&format!("{e:#}")))?;
+    let result = engine::refresh(root, &desc, agent, providers, now);
+    match &result {
+        Ok(summary) => log::info!(
+            "commands::refresh_stream_typed: id={:?} done — changed={} n_new={}",
+            id,
+            summary.changed,
+            summary.n_new,
+        ),
+        Err(e) => log::error!("commands::refresh_stream_typed: id={:?} failed: {e:#}", id),
+    }
+    result.map_err(|e| classify_agent_error(&e))
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -744,5 +868,98 @@ mod tests {
             "error must mention 'No results': {err}"
         );
         assert_eq!(agent.synthesize_calls(), 0, "synthesize must not be called");
+    }
+
+    // ── Typed FreshetError classification ───────────────────────────────────
+
+    /// 0-items path → FreshetError with code "no_sources".
+    #[test]
+    fn typed_error_no_sources_on_zero_items() {
+        let agent = FakeAgent::reflecting(AgentKind::ClaudeCode);
+        let providers: Vec<Box<dyn SourceProvider>> = vec![];
+
+        let err = generate_first_draft(&draft_input(), &agent, &providers, "2026-06-14T10:00:00Z")
+            .unwrap_err();
+
+        assert_eq!(err.code, "no_sources", "wrong code: {err:?}");
+        assert!(
+            err.message.contains("No results"),
+            "message must mention 'No results': {}", err.message
+        );
+        assert_eq!(agent.synthesize_calls(), 0);
+    }
+
+    /// create_stream 0-items → FreshetError code "no_sources".
+    #[test]
+    fn typed_error_create_stream_no_sources() {
+        let dir = tmp();
+        let root = dir.path();
+        let agent = FakeAgent::reflecting(AgentKind::ClaudeCode);
+        let providers: Vec<Box<dyn SourceProvider>> = vec![];
+
+        let desc = description_from_input(&draft_input(), "2026-06-14T10:00:00Z");
+        let err = create_stream(root, &desc, &agent, &providers, "2026-06-14T10:00:00Z")
+            .unwrap_err();
+
+        assert_eq!(err.code, "no_sources", "wrong code: {err:?}");
+    }
+
+    /// classify_agent_error: "Not logged in" text → code "not_logged_in".
+    #[test]
+    fn classify_not_logged_in() {
+        let anyhow_err = anyhow::anyhow!("claude synthesize failed: Not logged in · Please run /login");
+        let fe = classify_agent_error(&anyhow_err);
+        assert_eq!(fe.code, "not_logged_in", "wrong code: {fe:?}");
+        assert!(fe.hint.is_some(), "not_logged_in must carry a hint");
+    }
+
+    /// classify_agent_error: "/login" in message → code "not_logged_in".
+    #[test]
+    fn classify_not_logged_in_via_login_string() {
+        let anyhow_err = anyhow::anyhow!("please run /login to authenticate");
+        let fe = classify_agent_error(&anyhow_err);
+        assert_eq!(fe.code, "not_logged_in");
+    }
+
+    /// classify_agent_error: timeout message → code "timeout".
+    #[test]
+    fn classify_timeout() {
+        let anyhow_err = anyhow::anyhow!("agent timed out after 30s");
+        let fe = classify_agent_error(&anyhow_err);
+        assert_eq!(fe.code, "timeout", "wrong code: {fe:?}");
+    }
+
+    /// classify_agent_error: unknown error → code "agent_failed".
+    #[test]
+    fn classify_agent_failed_generic() {
+        let anyhow_err = anyhow::anyhow!("something completely different went wrong");
+        let fe = classify_agent_error(&anyhow_err);
+        assert_eq!(fe.code, "agent_failed", "wrong code: {fe:?}");
+        assert!(fe.message.contains("something completely different"), "message: {}", fe.message);
+    }
+
+    /// FreshetError serializes to camelCase with code/message/hint fields.
+    #[test]
+    fn freshet_error_serializes_camel_case() {
+        let fe = FreshetError::not_logged_in();
+        let json = serde_json::to_string(&fe).unwrap();
+        assert!(json.contains("\"code\""), "json: {json}");
+        assert!(json.contains("\"message\""), "json: {json}");
+        assert!(json.contains("\"hint\""), "json: {json}");
+        assert!(json.contains("not_logged_in"), "json: {json}");
+        // No snake_case field names at the top level.
+        assert!(!json.contains("\"code_field\""), "json: {json}");
+    }
+
+    /// FreshetError::no_sources has no hint (the message is self-contained).
+    #[test]
+    fn freshet_error_no_sources_no_hint() {
+        let fe = FreshetError::no_sources();
+        assert_eq!(fe.code, "no_sources");
+        assert!(fe.hint.is_none(), "no_sources should have no hint");
+
+        // Serialized JSON must NOT contain "hint" key (skip_serializing_if).
+        let json = serde_json::to_string(&fe).unwrap();
+        assert!(!json.contains("\"hint\""), "hint key must be absent: {json}");
     }
 }

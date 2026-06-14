@@ -11,6 +11,7 @@ import type {
   AppConfig,
   AgentStatus,
   AgentKind,
+  FreshetError,
 } from "./types";
 import type { Bridge } from "./Bridge";
 import { sampleStreams, sampleDescriptions, sampleDocFor } from "./sampleData";
@@ -18,6 +19,9 @@ import { sampleStreams, sampleDescriptions, sampleDocFor } from "./sampleData";
 const STORAGE_KEY = "freshet-mock";
 
 const MOCK_AGENT: AgentStatus = { kind: "claude_code", available: true, version: "mock" };
+
+/** Simulate agent state in MockBridge for testing error surfaces. */
+export type MockAgentState = "ok" | "not_logged_in" | "none";
 
 export interface MockBridgeOptions {
   /** Override the onboarding state returned by getOnboardingState/listAgents/recheckAgents.
@@ -27,6 +31,16 @@ export interface MockBridgeOptions {
     hasRoot: boolean;
     agent?: AgentStatus | null;
   };
+  /**
+   * Simulate a specific agent state. When set:
+   * - "ok" (default): normal behavior, existing tests unaffected.
+   * - "not_logged_in": generateFirstDraft/refreshStream/createStream throw a
+   *   FreshetError with code "not_logged_in"; listAgents returns the agent as
+   *   available (it exists but isn't authed).
+   * - "none": generateFirstDraft/refreshStream/createStream throw a FreshetError
+   *   with code "no_agent"; listAgents returns [].
+   */
+  agentState?: MockAgentState;
 }
 
 interface StoredState {
@@ -72,6 +86,7 @@ export class MockBridge implements Bridge {
   private state: StoredState;
   private progressListeners: Array<(e: RefreshProgress) => void> = [];
   private _onboardingState: { onboarded: boolean; hasRoot: boolean; agent?: AgentStatus | null };
+  private _agentState: MockAgentState;
 
   constructor(options?: MockBridgeOptions) {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -85,12 +100,40 @@ export class MockBridge implements Bridge {
       this.state = seedState();
     }
 
-    // Default: onboarded=true so all existing tests/surfaces are unaffected.
-    this._onboardingState = options?.onboardingState ?? {
-      onboarded: true,
-      hasRoot: true,
-      agent: { ...MOCK_AGENT },
-    };
+    this._agentState = options?.agentState ?? "ok";
+
+    // Build default onboardingState from agentState if not explicitly provided.
+    if (options?.onboardingState) {
+      this._onboardingState = options.onboardingState;
+    } else if (this._agentState === "none") {
+      this._onboardingState = { onboarded: true, hasRoot: true, agent: null };
+    } else if (this._agentState === "not_logged_in") {
+      // Agent exists but is not authenticated — still show it as available.
+      this._onboardingState = { onboarded: true, hasRoot: true, agent: { ...MOCK_AGENT } };
+    } else {
+      // Default: onboarded=true so all existing tests/surfaces are unaffected.
+      this._onboardingState = { onboarded: true, hasRoot: true, agent: { ...MOCK_AGENT } };
+    }
+  }
+
+  /** Throw the appropriate FreshetError for the current agentState, if any. */
+  private _throwIfAgentError(): void {
+    if (this._agentState === "not_logged_in") {
+      const err: FreshetError = {
+        code: "not_logged_in",
+        message: "The agent is not logged in.",
+        hint: "Open your terminal, run `claude` then `/login`, then re-check.",
+      };
+      throw err;
+    }
+    if (this._agentState === "none") {
+      const err: FreshetError = {
+        code: "no_agent",
+        message: "No agent detected or selected.",
+        hint: "Install Claude Code or Codex, then re-check.",
+      };
+      throw err;
+    }
   }
 
   /** Test helper: override the onboarding state after construction. */
@@ -126,8 +169,11 @@ export class MockBridge implements Bridge {
   }
 
   async listAgents(): Promise<AgentStatus[]> {
+    if (this._agentState === "none") return [];
     const { agent } = this._onboardingState;
-    if (agent && agent.available) return [{ ...agent }];
+    // Return the agent status (available or not) so callers can distinguish
+    // "agent found but unavailable" from "no agent at all".
+    if (agent != null) return [{ ...agent }];
     return [];
   }
 
@@ -161,6 +207,7 @@ export class MockBridge implements Bridge {
   }
 
   async generateFirstDraft(input: DraftInput): Promise<DraftResult> {
+    this._throwIfAgentError();
     const id = slugify(input.topic);
     const title = input.topic
       .split(" ")
@@ -198,6 +245,7 @@ Tracking: ${input.topic}.
   }
 
   async createStream(desc: StreamDescription): Promise<StreamSummary> {
+    this._throwIfAgentError();
     const summary: StreamSummary = {
       id: desc.id,
       title: desc.title,
@@ -211,6 +259,7 @@ Tracking: ${input.topic}.
   }
 
   async refreshStream(id: string): Promise<Summary> {
+    this._throwIfAgentError();
     const summary = this.state.summaries.find(s => s.id === id);
     if (!summary) throw new Error(`Stream not found: ${id}`);
 

@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::agent::discovery::CmdRunner;
 use crate::agent::{detect_agents, select_agent, Agent};
-use crate::commands::{self, AppConfig, DraftInput, DraftResult, GetStreamResult, OnboardingState};
+use crate::commands::{self, AppConfig, DraftInput, DraftResult, FreshetError, GetStreamResult, OnboardingState};
 use crate::model::{AgentKind, AgentStatus, StreamDescription, StreamStatus, StreamSummary, Summary};
 use crate::scheduler::{due_for_tick, runs_at_startup};
 use crate::sources::{registry, HttpClient, SourceProvider};
@@ -64,6 +64,7 @@ fn estr<T>(r: anyhow::Result<T>) -> Result<T, String> {
     r.map_err(|e| format!("{e:#}"))
 }
 
+
 /// Current wall-clock as an RFC-3339 string.
 // UNVERIFIED: live path (reads the real clock; plain fns take `now` explicitly)
 fn now_iso() -> String {
@@ -86,7 +87,7 @@ fn detect_live(runner: &dyn CmdRunner) -> Vec<AgentStatus> {
 /// calling any real LLM. This lets the full app run end-to-end with no Claude
 /// auth required.
 // UNVERIFIED: live path
-fn resolve_agent(state: &BackendState) -> anyhow::Result<Box<dyn Agent>> {
+fn resolve_agent(state: &BackendState) -> Result<Box<dyn Agent>, FreshetError> {
     let fake_flag = std::env::var("FRESHET_FAKE_AGENT")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
@@ -102,7 +103,7 @@ fn resolve_agent(state: &BackendState) -> anyhow::Result<Box<dyn Agent>> {
 
     let statuses = detect_live(state.runner.as_ref());
     select_agent(state.selected_agent(), &statuses, Arc::clone(&state.runner))
-        .ok_or_else(|| anyhow::anyhow!("no usable agent found; check agent installation"))
+        .ok_or_else(FreshetError::no_agent)
 }
 
 /// Build HTTP-backed providers for the given channel names.
@@ -202,23 +203,23 @@ pub fn set_stream_status(
 pub fn generate_first_draft(
     state: State<'_, BackendState>,
     input: DraftInput,
-) -> Result<DraftResult, String> {
+) -> Result<DraftResult, FreshetError> {
     // UNVERIFIED: live path — resolves a live agent + HTTP providers.
-    let agent = estr(resolve_agent(&state))?;
+    let agent = resolve_agent(&state)?;
     let providers = resolve_providers(&state, &input.sources);
-    estr(commands::generate_first_draft(&input, agent.as_ref(), &providers, &now_iso()))
+    commands::generate_first_draft(&input, agent.as_ref(), &providers, &now_iso())
 }
 
 #[tauri::command]
 pub fn create_stream(
     state: State<'_, BackendState>,
     description: StreamDescription,
-) -> Result<StreamSummary, String> {
-    let root = estr(state.root())?;
+) -> Result<StreamSummary, FreshetError> {
+    let root = state.root().map_err(|e| FreshetError::agent_failed(&format!("{e:#}")))?;
     // UNVERIFIED: live path
-    let agent = estr(resolve_agent(&state))?;
+    let agent = resolve_agent(&state)?;
     let providers = resolve_providers(&state, &description.sources);
-    estr(commands::create_stream(&root, &description, agent.as_ref(), &providers, &now_iso()))
+    commands::create_stream(&root, &description, agent.as_ref(), &providers, &now_iso())
 }
 
 /// Refresh a stream, awaiting the result and returning its [`Summary`].
@@ -229,7 +230,7 @@ pub fn create_stream(
 /// terminal `stream_updated {streamId, changed}` event, then the command
 /// resolves to the `Summary` the caller awaits.
 #[tauri::command]
-pub async fn refresh_stream(app: AppHandle, id: String) -> Result<Summary, String> {
+pub async fn refresh_stream(app: AppHandle, id: String) -> Result<Summary, FreshetError> {
     // Run on a blocking task so the engine work never blocks the async runtime,
     // then await its result. UNVERIFIED: live path — runs a live agent + HTTP
     // providers in a blocking task.
@@ -238,8 +239,8 @@ pub async fn refresh_stream(app: AppHandle, id: String) -> Result<Summary, Strin
         run_refresh_emitting(&app, &state, &id)
     })
     .await
-    .map_err(|e| format!("refresh task panicked: {e}"))?;
-    estr(result)
+    .map_err(|e| FreshetError::agent_failed(&format!("refresh task panicked: {e}")))?;
+    result
 }
 
 /// The body of a refresh: resolve root/agent/providers, run the engine, and
@@ -251,18 +252,21 @@ fn run_refresh_emitting(
     app: &AppHandle,
     state: &BackendState,
     id: &str,
-) -> anyhow::Result<Summary> {
+) -> Result<Summary, FreshetError> {
     let _ = app.emit("refresh_progress", RefreshProgress { stream_id: id.into(), phase: "researching".into() });
 
-    let result = (|| {
-        let root = state.root()?;
-        let desc = store::load_description(&root, id)?;
+    let result: Result<Summary, FreshetError> = (|| {
+        let root = state.root()
+            .map_err(|e| FreshetError::agent_failed(&format!("{e:#}")))?;
+        let desc = store::load_description(&root, id)
+            .map_err(|e| FreshetError::agent_failed(&format!("{e:#}")))?;
         let agent = resolve_agent(state)?;
         let providers = resolve_providers(state, &desc.sources);
 
         let _ = app.emit("refresh_progress", RefreshProgress { stream_id: id.into(), phase: "synthesizing".into() });
 
         crate::engine::refresh(&root, &desc, agent.as_ref(), &providers, &now_iso())
+            .map_err(|e| commands::classify_agent_error(&e))
     })();
 
     match &result {
@@ -270,12 +274,13 @@ fn run_refresh_emitting(
             let _ = app.emit("refresh_progress", RefreshProgress { stream_id: id.into(), phase: "done".into() });
             let _ = app.emit("stream_updated", StreamUpdated { stream_id: id.into(), changed: summary.changed });
         }
-        Err(e) => emit_error(app, id, &format!("{e:#}")),
+        Err(e) => emit_error(app, id, &e.message),
     }
     result
 }
 
-fn emit_error(app: &AppHandle, id: &str, _msg: &str) {
+fn emit_error(app: &AppHandle, id: &str, msg: &str) {
+    log::error!("refresh_stream: id={:?} error: {}", id, msg);
     let _ = app.emit("refresh_progress", RefreshProgress { stream_id: id.into(), phase: "error".into() });
     let _ = app.emit("stream_updated", StreamUpdated { stream_id: id.into(), changed: false });
 }

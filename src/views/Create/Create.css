@@ -186,6 +186,10 @@
   cursor: not-allowed;
 }
 
+.create-agent-error {
+  margin: 0 2rem 1.5rem;
+}
+
 .create-preview {
   margin: 0 2rem 2rem;
   border: 1px solid var(--rule);

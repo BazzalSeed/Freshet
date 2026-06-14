@@ -120,3 +120,63 @@ test("Preview is disabled when no sources are selected", async () => {
   // No sources checked
   expect(screen.getByRole("button", { name: /preview/i })).toBeDisabled();
 });
+
+// ── Agent error surfaces ───────────────────────────────────────────────────
+
+test("agentState:not_logged_in — Preview shows AgentNotice with login guidance", async () => {
+  const bridge = new MockBridge({ agentState: "not_logged_in" });
+  render(
+    <BridgeProvider bridge={bridge}>
+      <Create onCreated={vi.fn()} onCancel={vi.fn()} />
+    </BridgeProvider>
+  );
+
+  await userEvent.type(screen.getByLabelText("Topic"), "ai agents");
+  await userEvent.click(screen.getByRole("checkbox", { name: /hackernews/i }));
+  await userEvent.click(screen.getByRole("button", { name: /preview/i }));
+
+  // AgentNotice must appear with login guidance (title text).
+  expect(await screen.findByText(/agent not logged in/i)).toBeInTheDocument();
+  // Must show the /login step — may match in title, message, or hint.
+  expect(screen.getAllByText(/\/login/i).length).toBeGreaterThan(0);
+  // Must show the Re-check button.
+  expect(screen.getByRole("button", { name: /re-check/i })).toBeInTheDocument();
+  // The preview draft area must NOT appear.
+  expect(screen.queryByRole("region", { name: /preview/i })).not.toBeInTheDocument();
+});
+
+test("agentState:not_logged_in — clicking Re-check calls bridge.recheckAgents", async () => {
+  const bridge = new MockBridge({ agentState: "not_logged_in" });
+  const recheckSpy = vi.spyOn(bridge, "recheckAgents");
+
+  render(
+    <BridgeProvider bridge={bridge}>
+      <Create onCreated={vi.fn()} onCancel={vi.fn()} />
+    </BridgeProvider>
+  );
+
+  await userEvent.type(screen.getByLabelText("Topic"), "ai agents");
+  await userEvent.click(screen.getByRole("checkbox", { name: /hackernews/i }));
+  await userEvent.click(screen.getByRole("button", { name: /preview/i }));
+
+  await screen.findByText(/agent not logged in/i);
+  await userEvent.click(screen.getByRole("button", { name: /re-check/i }));
+
+  expect(recheckSpy).toHaveBeenCalled();
+});
+
+test("agentState:none — Preview shows AgentNotice with no_agent guidance", async () => {
+  const bridge = new MockBridge({ agentState: "none" });
+  render(
+    <BridgeProvider bridge={bridge}>
+      <Create onCreated={vi.fn()} onCancel={vi.fn()} />
+    </BridgeProvider>
+  );
+
+  await userEvent.type(screen.getByLabelText("Topic"), "ai agents");
+  await userEvent.click(screen.getByRole("checkbox", { name: /hackernews/i }));
+  await userEvent.click(screen.getByRole("button", { name: /preview/i }));
+
+  expect(await screen.findByText(/no agent found/i)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /re-check/i })).toBeInTheDocument();
+});

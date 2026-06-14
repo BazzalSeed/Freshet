@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useBridge } from "../../bridge/BridgeProvider";
-import { FREE_SOURCES } from "../../bridge/types";
-import type { StreamSummary, CadenceMode, DraftResult } from "../../bridge/types";
+import { FREE_SOURCES, asFreshetError } from "../../bridge/types";
+import type { StreamSummary, CadenceMode, DraftResult, FreshetError } from "../../bridge/types";
+import { AgentNotice } from "../../components/AgentNotice";
 import "./Create.css";
 
 interface CreateProps {
@@ -19,6 +20,7 @@ export function Create({ onCreated, onCancel }: CreateProps) {
   const [draft, setDraft] = useState<DraftResult | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [agentError, setAgentError] = useState<FreshetError | null>(null);
 
   function toggleSource(source: string) {
     setSelectedSources((prev) => {
@@ -52,6 +54,7 @@ export function Create({ onCreated, onCancel }: CreateProps) {
   async function handlePreview() {
     if (previewDisabled) return;
     setPreviewing(true);
+    setAgentError(null);
     try {
       const result = await bridge.generateFirstDraft({
         topic: topic.trim(),
@@ -62,6 +65,8 @@ export function Create({ onCreated, onCancel }: CreateProps) {
             : { mode: cadenceMode },
       });
       setDraft(result);
+    } catch (e) {
+      setAgentError(asFreshetError(e));
     } finally {
       setPreviewing(false);
     }
@@ -70,12 +75,22 @@ export function Create({ onCreated, onCancel }: CreateProps) {
   async function handleCreate() {
     if (!draft) return;
     setCreating(true);
+    setAgentError(null);
     try {
       const summary = await bridge.createStream(draft.proposedDescription);
       onCreated(summary);
+    } catch (e) {
+      setAgentError(asFreshetError(e));
     } finally {
       setCreating(false);
     }
+  }
+
+  async function handleRecheck() {
+    setAgentError(null);
+    await bridge.recheckAgents();
+    // Automatically retry the preview after re-checking.
+    await handlePreview();
   }
 
   return (
@@ -192,6 +207,17 @@ export function Create({ onCreated, onCancel }: CreateProps) {
           </button>
         </div>
       </div>
+
+      {/* Agent error notice */}
+      {agentError && (
+        <div className="create-agent-error">
+          <AgentNotice
+            error={agentError}
+            onRecheck={handleRecheck}
+            onRetry={handlePreview}
+          />
+        </div>
+      )}
 
       {/* Draft preview area */}
       {draft && (

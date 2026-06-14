@@ -19,3 +19,50 @@ export type AgentKind = "claude_code" | "codex";
 export interface AgentStatus { kind: AgentKind; available: boolean; version?: string; path?: string }
 export interface OnboardingState { onboarded: boolean; hasRoot: boolean; agent?: AgentStatus }
 export interface AppConfig { root?: string; selectedAgent?: AgentKind; onboarded: boolean }
+
+// ── Typed agent errors (mirrors Rust FreshetError) ───────────────────────────
+
+/**
+ * Structured error returned by agent-using bridge commands.
+ * Tauri serializes the Rust `Err(FreshetError)` variant as this object,
+ * which the JS `catch` handler receives directly.
+ *
+ * Codes:
+ *   not_logged_in  — agent is not authenticated; show re-auth steps
+ *   no_agent       — no agent binary detected; show install guidance
+ *   timeout        — agent invocation timed out
+ *   no_sources     — all source providers returned 0 items
+ *   agent_failed   — any other agent error (message has detail)
+ */
+export interface FreshetError {
+  code: "not_logged_in" | "no_agent" | "timeout" | "no_sources" | "agent_failed" | string;
+  message: string;
+  hint?: string;
+}
+
+/**
+ * Parse whatever `invoke` throws into a `FreshetError`.
+ *
+ * Tauri delivers the `Err(FreshetError)` from Rust as a plain JS object with
+ * `code`/`message`/`hint` fields. A plain `string` or `Error` thrown by the
+ * bridge (e.g. pre-typed commands) falls back to `{ code: "agent_failed" }`.
+ */
+export function asFreshetError(e: unknown): FreshetError {
+  if (e != null && typeof e === "object" && "code" in e && "message" in e) {
+    const obj = e as Record<string, unknown>;
+    if (typeof obj.code === "string" && typeof obj.message === "string") {
+      return {
+        code: obj.code,
+        message: obj.message,
+        hint: typeof obj.hint === "string" ? obj.hint : undefined,
+      };
+    }
+  }
+  if (typeof e === "string") {
+    return { code: "agent_failed", message: e };
+  }
+  if (e instanceof Error) {
+    return { code: "agent_failed", message: e.message };
+  }
+  return { code: "agent_failed", message: "An unknown error occurred." };
+}
