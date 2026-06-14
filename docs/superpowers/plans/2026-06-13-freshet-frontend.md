@@ -230,7 +230,7 @@ test("lists streams; refresh marks changed; saveNotes persists", async () => {
 });
 ```
 
-- [ ] **Step 3:** Run → FAIL. **Step 4:** Implement `MockBridge` over `sampleData` (in-memory maps; `refreshStream` toggles `changedSinceSeen` + bumps `lastCheckedAt`; `saveNotes` replaces the `## My notes` block in the stored markdown; `onRefreshProgress` emits `researching→synthesizing→done` via `setTimeout`, returns an unsubscribe). **Step 5:** Run → PASS. **Step 6:** Commit.
+- [ ] **Step 3:** Run → FAIL. **Step 4:** Implement `MockBridge` over `sampleData` (in-memory maps; `refreshStream` toggles `changedSinceSeen` + bumps `lastCheckedAt`; `saveNotes` replaces the `## My notes` block in the stored markdown; `onRefreshProgress` emits `researching→synthesizing→done` via `setTimeout`, returns an unsubscribe). **Persist state to `localStorage`** (seed from `sampleData` on first run; load on construct, save after every mutation) so edited notes and created streams survive a page reload — with a `reset()` helper to reseed. **Step 5:** Run → PASS (add a test: a second `MockBridge` instance sees a prior `saveNotes` edit). **Step 6:** Commit.
 
 ### Task 2.4: BridgeProvider context
 
