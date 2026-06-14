@@ -29,3 +29,6 @@ src-tauri/target/
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code local state (machine-specific settings + agent worktrees)
+.claude/
