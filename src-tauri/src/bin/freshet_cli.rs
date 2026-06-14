@@ -1,11 +1,12 @@
 //! `freshet_cli` — a headless harness to drive `engine::refresh` outside Tauri.
 //!
 //! Usage:
-//!   freshet_cli refresh <root> <stream-id>           # live agent + HTTP providers
-//!   freshet_cli refresh <root> <stream-id> --fake    # FakeAgent + FakeSourceProvider
+//!   freshet_cli refresh <root> <stream-id>               # real sources + real agent
+//!                                                        # (honours FRESHET_FAKE_AGENT env)
+//!   freshet_cli refresh <root> <stream-id> --fake-agent  # real sources + fake agent
+//!   freshet_cli refresh <root> <stream-id> --fake        # fake sources + fake agent (offline)
 //!
-//! The `--fake` path uses no network and no agent process, so it runs in CI /
-//! headless. The live path (no flag) is marked UNVERIFIED.
+//! Set RUST_LOG (e.g. RUST_LOG=info) to control log verbosity; defaults to "info".
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -20,6 +21,10 @@ use freshet_tmp_lib::sources::{registry, FakeSourceProvider, HttpClient, Reqwest
 use freshet_tmp_lib::store;
 
 fn main() -> ExitCode {
+    // Fix 1: initialise env_logger so all log::info!/warn!/error! calls reach stderr.
+    // Defaults to "info" level when RUST_LOG is not set.
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     let args: Vec<String> = std::env::args().collect();
     match run(&args) {
         Ok(()) => ExitCode::SUCCESS,
@@ -30,12 +35,15 @@ fn main() -> ExitCode {
     }
 }
 
+/// Three-mode refresh:
+/// - `--fake`       → fake sources + fake agent  (fully offline)
+/// - `--fake-agent` → real sources + fake agent  (real HTTP, deterministic synthesis)
+/// - (default)      → real sources + real agent  (honours FRESHET_FAKE_AGENT env)
 fn run(args: &[String]) -> anyhow::Result<()> {
-    // args[0] is the binary name.
     let cmd = args.get(1).map(String::as_str);
     if cmd != Some("refresh") {
         anyhow::bail!(
-            "usage: freshet_cli refresh <root> <stream-id> [--fake]"
+            "usage: freshet_cli refresh <root> <stream-id> [--fake-agent | --fake]"
         );
     }
 
@@ -45,14 +53,17 @@ fn run(args: &[String]) -> anyhow::Result<()> {
     let stream_id = args
         .get(3)
         .ok_or_else(|| anyhow::anyhow!("missing <stream-id>"))?;
-    let fake = args.iter().any(|a| a == "--fake");
+
+    let full_fake   = args.iter().any(|a| a == "--fake");
+    let fake_agent  = args.iter().any(|a| a == "--fake-agent");
 
     let root = Path::new(root);
     let desc = store::load_description(root, stream_id)?;
     let now = chrono::Utc::now().to_rfc3339();
 
-    if fake {
-        // Headless, deterministic path: no network, no agent process.
+    // ── Mode: fully offline (fake sources + fake agent) ─────────────────────
+    if full_fake {
+        log::info!("mode: --fake (fake sources + fake agent, fully offline)");
         let agent = FakeAgent::reflecting(AgentKind::ClaudeCode);
         let providers: Vec<Box<dyn SourceProvider>> = vec![Box::new(FakeSourceProvider::new(
             "hackernews",
@@ -74,16 +85,41 @@ fn run(args: &[String]) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // ── Live path ───────────────────────────────────────────────────────────
-    // UNVERIFIED: live path — spawns a real agent + real HTTP fetches.
+    // ── Real HTTP providers (shared by --fake-agent and default) ────────────
+    let http: Arc<dyn HttpClient> = Arc::new(ReqwestClient::new()?);
+    let providers = registry(&desc.sources, http);
+
+    // ── Mode: real sources + fake agent ─────────────────────────────────────
+    if fake_agent {
+        log::info!("mode: --fake-agent (real sources + deterministic fake agent)");
+        let agent = FakeAgent::reflecting(AgentKind::ClaudeCode);
+        let summary = engine::refresh(root, &desc, &agent, &providers, &now)?;
+        println!(
+            "[--fake-agent] refresh {stream_id}: changed={} nNew={}",
+            summary.changed, summary.n_new
+        );
+        return Ok(());
+    }
+
+    // ── Mode: real sources + real agent (default) ────────────────────────────
+    // Honour FRESHET_FAKE_AGENT env the same way the Tauri app does.
+    if std::env::var("FRESHET_FAKE_AGENT").is_ok() {
+        log::info!("mode: default (real sources + fake agent via FRESHET_FAKE_AGENT env)");
+        let agent = FakeAgent::reflecting(AgentKind::ClaudeCode);
+        let summary = engine::refresh(root, &desc, &agent, &providers, &now)?;
+        println!(
+            "[FRESHET_FAKE_AGENT] refresh {stream_id}: changed={} nNew={}",
+            summary.changed, summary.n_new
+        );
+        return Ok(());
+    }
+
+    log::info!("mode: default (real sources + real agent)");
     let runner: Arc<dyn CmdRunner> = Arc::new(RealCmdRunner);
     let exists = |p: &Path| p.exists();
     let statuses = freshet_tmp_lib::agent::detect_agents(runner.as_ref(), &exists);
     let agent: Box<dyn Agent> = select_agent(None, &statuses, Arc::clone(&runner))
-        .ok_or_else(|| anyhow::anyhow!("no usable agent found"))?;
-
-    let http: Arc<dyn HttpClient> = Arc::new(ReqwestClient::new()?);
-    let providers = registry(&desc.sources, http);
+        .ok_or_else(|| anyhow::anyhow!("no usable agent found (is 'claude' installed?)"))?;
 
     let summary = engine::refresh(root, &desc, agent.as_ref(), &providers, &now)?;
     println!(
