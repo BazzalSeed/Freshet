@@ -46,8 +46,9 @@ without colliding.
   for research + synthesis; design the §9 fallback ladder.
 - **Cadence:** manual + on-launch + per-stream **interval** (a small scheduler).
 - **Multiple streams**; pause / retire a stream.
-- **Version history** — a local git repo over the output folder; each refresh / `My notes` edit is
-  committed, giving per-document history, refresh-to-refresh diffs, and safe revert (backend phase).
+- **Version history** — lightweight per-document history (timestamped snapshots under
+  `.freshet/history/` in v1; embeddable git later as a sync substrate), giving history,
+  refresh-to-refresh diffs, and safe revert (backend phase).
 - **Stack:** Tauri 2 + Rust core + React/Vite frontend.
 
 **Out of scope (deferred)**
@@ -247,18 +248,22 @@ All three are built in the browser-mock loop first (mock bridge), then wired to 
     state/<id>.json             ← per-stream run state (seen ids, timestamps, digest)
 ```
 
-### Version history (local git)
+### Version history
 
-Freshet maintains a **local git repository** over the output folder, committing the living
-documents (and `## My notes` edits) on each change. This gives **per-document history** (how a
-topic's understanding evolved), **diffs between refreshes** (a literal file-level view of what
-changed), and **safe revert** of a bad synthesis — and is a natural substrate for the future
-cloud sync (vision §11). It is **complementary** to the state sidecar (§5.3): git is the
-human-facing history; the sidecar remains the mechanism for dedup / change-detection logic.
+Freshet keeps a **lightweight per-document history** so you can see how a topic's understanding
+evolved, diff one refresh against the last (a file-level view of what changed), and safely revert a
+bad synthesis.
 
-**Must not hijack the user's vault VCS.** If the user already version-controls the folder, Freshet
-detects the existing `.git` and does not impose commits without opt-in. *(Open: whether the history
-lives in the root repo, a scoped repo Freshet owns, or is opt-in — §15.)*
+**v1 — timestamped snapshots.** On each change, write a copy to `.freshet/history/<id>/<iso>.md`
+(plus a small index). Zero external dependency, inherently linear (Freshet is the only writer), and
+no `.git` to collide with a vault the user already version-controls. Diff/revert over markdown are trivial.
+
+**Later — embeddable git** (pure-Rust `gitoxide`, no `git` binary required) if/when the cloud sync
+(vision §11) lands: `git push/pull` is the natural sync substrate and standard tooling can inspect
+history. **Not Mercurial** — a heavier real dependency (extra install, no embedded Rust library).
+
+Either way this is **complementary** to the state sidecar (§5.3): history is human-facing; the
+sidecar remains the change-detection mechanism.
 
 ## 11. Error handling
 
@@ -315,5 +320,5 @@ acceptance criteria.
 - **Second-agent adapter** — which agent to use as the non-Claude proof (Codex assumed); how it sources
   without `last30days`.
 - **"Significance" threshold** — how aggressively to filter low-score new items out of "What changed".
-- **Git history location** — root repo vs. a scoped repo Freshet owns vs. opt-in, and how to coexist
-  with a vault the user already version-controls (§10 Version history).
+- **Version-history mechanism** — snapshots for v1 vs. adopting embeddable git earlier (only worth it
+  once cloud sync exists); if git, where the repo lives and how to coexist with a user-managed vault (§10).
