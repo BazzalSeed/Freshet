@@ -1,0 +1,23 @@
+[
+  {
+    "id": "0xabc123def456789",
+    "question": "Will Rust become a top-3 language by Stack Overflow survey 2027?",
+    "slug": "rust-top-3-language-2027",
+    "volume": 98234.5,
+    "outcomePrices": "[\"0.72\",\"0.28\"]"
+  },
+  {
+    "id": "42001",
+    "question": "Will the Rust compiler support full async traits by end of 2026?",
+    "slug": "rust-async-traits-2026",
+    "volume": 45612.0,
+    "outcomePrices": "[\"0.61\",\"0.39\"]"
+  },
+  {
+    "id": "42002",
+    "question": "Will a major cloud provider adopt Rust for core infrastructure in 2026?",
+    "slug": "major-cloud-rust-2026",
+    "volume": 12345.75,
+    "outcomePrices": null
+  }
+]
